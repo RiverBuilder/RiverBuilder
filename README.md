@@ -1,4 +1,4 @@
-# RiverBuilder ![RiverBuilder logo](https://github.com/RiverBuilder/RiverBuilder/blob/master/logo.png {width=16px height=16px})
+# RiverBuilder ![RiverBuilder logo](https://github.com/RiverBuilder/RiverBuilder/blob/master/logo.png "logo" {width=16px height=16px})
 
 ## Dependencies
 
