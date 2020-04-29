@@ -1,4 +1,4 @@
-# RiverBuilder ![RiverBuilder logo]()
+# RiverBuilder ![RiverBuilder logo](https://github.com/RiverBuilder/RiverBuilder/blob/master/logo.png)
 
 ## Dependencies
 
@@ -18,13 +18,13 @@ The main command to run the script is `python3 -m riverbuilder <inputfile.txt> <
 
 * `<your message>` is a message will be added to the output. It is also optional. If `<outputFolder>` is not set, this can't be set.
 
-More explanations can be found in [manual]().
+More explanations can be found in [manual](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.0.0_FINAL.pdf).
 
 ### In MacOS or Linux
 
 Type the following commands in a terminal.
 
-'''
+```
 # Download the repository
 git clone https://github.com/RiverBuilder/RiverBuilder
 cd RiverBuilder
@@ -35,11 +35,11 @@ pip3 install matplotlib
 
 # Run the script
 python3 -m riverbuilder samples/S1/S1.txt samples/S1/S1 "A simple test sample."
-'''
+```
 
 And you should see the following screen output.
 
-'''
+```
 Start Parsing Inputs...
 Start Creating River Channel...
 
@@ -100,13 +100,13 @@ Average Width of Inner Channel:35.0
 Average Height of Inner Channel:4.823
 Coefficient of Variation (W_ic):0.101
 Coefficient of Variation (H_ic):0.406
-'''
+```
 
 ### In Windows
 
 ## Documentation
 
-The full manual is available [here]().
+The full manual is available [here](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.0.0_FINAL.pdf).
 
 ## License
 
