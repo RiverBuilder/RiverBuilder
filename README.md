@@ -104,6 +104,14 @@ Coefficient of Variation (H_ic):0.406
 
 ### In Windows
 
+1. Download the github folder.
+2. Open a terminal and switch to RiverBuilder folder.
+3. Run the following command:
+```
+<YOUR_PATH_TO_PYTHON3>\python.exe -m riverbuilder samples\S1\S1.txt samples\S1\S1 "A simple test sample."
+```
+4. A similar output should be printed.
+
 ## Documentation
 
 The full manual is available [here](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.0.0_FINAL.pdf).
