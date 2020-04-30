@@ -473,6 +473,8 @@ class Channel(Pipe):
         rb = self.levels_z['right'][0]
         lb_ind = np.where(lbx == xVal)[0]
         if len(lb_ind) == 0:
+            #print("ind",ind,"rbx max", np.amax(rbx), "lbx max", np.amax(lbx))
+            #print("ind",ind,"rbx max", np.amin(rbx), "lbx max", np.amin(lbx))
             bankH = rb[np.where(rbx == xVal)[0][0]]
         else:
             bankH = lb[lb_ind[0]]
