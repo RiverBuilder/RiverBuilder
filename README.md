@@ -104,6 +104,14 @@ Coefficient of Variation (H_ic):0.406
 
 ### In Windows
 
+1. Download the github folder.
+2. Open a terminal and switch to RiverBuilder folder.
+3. Run the following command:
+```
+<YOUR_PATH_TO_PYTHON3>\python.exe -m riverbuilder samples\S1\S1.txt samples\S1\S1 "A simple test sample."
+```
+4. A similar output should be printed.
+
 ## Documentation
 
 The full manual is available [here](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.0.0_FINAL.pdf).
@@ -112,4 +120,10 @@ The full manual is available [here](https://github.com/RiverBuilder/RiverBuilder
 
 MIT
 
+## Disclaimer
+
+No warranty is expressed or implied regarding the usefulness or completeness of the information contained in this manual or the associated software. References to commercial products do not imply endorsement by the authors. The concepts, materials, and methods presented in this manual are for informational purposes only. The authors have made substantial effort to ensure accuracy, but there is uncertainty and the authors shall not be held liable for calculations and/or decisions made on the basis of application of this software and manual. The information is provided "as is" and anyone who chooses to use the information is responsible for his or her own choices as to what to do with the data.
+
 ## Acknowledgment
+
+The underlying research used to develop River Builder came from a variety of sources, including UC Davis, the USDA National Institute of Food and Agriculture [Hatch project number #CA-D-LAW-7034-H], the Ticho Foundation (unrestricted donation), US Army Corps of Engineers, and Yuba County Water Agency (Award #201016094). Dr. Rocko Brown and Dr. Greg Pasternack also contributed their own resources in developing different aspects of the underlying research. We thank postdoctoral scholars Dr. Colin Byrne and Dr. Sebastian Schwindt for conversations about various aspects of this version of the software as we were developing it. Other members of the Pasternack lab group gave input from time to time during 2019 and 2020.
