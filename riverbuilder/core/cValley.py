@@ -60,8 +60,12 @@ class Valley(Pipe):
                     y_max = dy
 
             self.levels_n[direction].append(np.array([y_max*dir_mod[direction]]*len(self.x_v)))
+            self.levels_x[direction].append(self.x_v)
+            self.levels_y[direction].append(self.y_center)
             super().setLevel(z_offset, z_start, y_offset, direction, yfun)
             self.levels_n[direction].pop(0)
+            self.levels_x[direction].pop(0)
+            self.levels_y[direction].pop(0)
         else:
             super().setLevel(z_offset, z_start, y_offset, direction, yfun)
 

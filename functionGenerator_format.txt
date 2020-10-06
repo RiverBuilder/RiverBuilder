@@ -1,0 +1,104 @@
+# DISCLAIMER
+# No warranty is expressed or implied regarding the usefulness or completeness of the information provided by River Builder and its documentation. References to commercial products do not imply endorsement by the Authors of River Builder. The concepts, materials, and methods used in the algorithms and described in the manual are for informational purposes only. The Authors have made substantial effort to ensure the accuracy of the algorithms and the manual, but science is uncertain and the Authors nor their employers or funding sponsors shall not be held liable for calculations and/or decisions made on the basis of application of River Builder. The information is provided "as is" and anyone who chooses to use the information is responsible for her or his own choices as to what to do with the data and the individual is responsible for the results the follow from their decisions.
+
+#######################
+## Usage Information ##
+#######################
+
+# This input is intended to be used for riverbuilder1.0.0.
+
+# To use this input, call the following command in a terminal. Make sure the riverbuilder package is in current directory:
+#	python3 -m riverbuilder.generators.functionGenerator functionGenerator_format.txt
+
+# If the program runs successfuly (Otherwise, error information will be printed to console, and program will exit), user will get results in three ways:
+#   1. All generated functions will be printed to console.
+#   2. All generated functions will be saved to a txt file named *steppoolThalwegFunctions.txt*.
+#   3. A preview image file *steppoolThalwegPreview.png* will be saved.
+
+# Horizontal length (# need edit)
+
+
+#########################
+## Format Requirements ##
+#########################
+
+# 1. All user defined functions should follow the same format as defined in riverbuilderInput_format file.
+
+# 2. Sum of length of steps should not exceed length of reach.
+
+# 3. Reach parameters should be defined before steps.
+
+# 4. Step functions can only do addition; subtraction can be acheived via assigning negative amplitude.
+
+################
+## Guidelines ##
+################
+
+# 1. Everyline starting with '#' will be ignored.
+
+# 2. Reach parameters:
+# 		Length; should be an integer; default is 100
+# 		Slope; should be non-negative; deault is 0.
+# 		Arbitrary number of user defined functions. Each function should take one line.
+#		Meandering Centerline Functions. This follows the same format as it is in 
+#			riverbuilder input files. One has to submit these functions if an 
+#			unstraight centerline will be used in riverbuilder. 		
+
+# 3. Steps will be built in a sequencial order. Pre-defined steps will be in upper stream than post-defined steps.
+
+# 4. A step definition starts with a 'step starts' line, and ends with a 'step ends' line.
+
+# 5. A very basic step is shown as followed:
+#
+#    --------------------
+#                        \
+#                         \
+#                          \
+#   |---------1---------|-2-|
+# 	tread, riser (step <-> tread; riser <-> connector)
+#    Part 1 is defined as *tread*, which is regulated by two parameters:
+# 				tread length (default value is 10)
+# 				tread function (default value is 'flat')
+#    Part 2 is defined as *connector*, which connects current tread with following tread. Intuitively, the final tread of a reach will not have a connector. A connector is also regulated by two parameters:
+# 				riser height (default is 2)
+				riser length (default is 1)
+#    A step will also have a *repeat* parameter, which controls the number of repeation of the same step. The default value is 1.
+
+#########################################
+########### Example Inputs ##############
+#########################################
+
+#### Reach Parameters #####
+
+Length=100
+Slope=0
+MASK0=ALL
+
+SIN1=(1, 1, 0, MASK0)
+COS2=(1, 1, 0, MASK0)
+
+#### Step Parameters #####
+
+# step group 1
+
+step starts
+
+tread length=10
+riser height=3
+riser length=1
+repeat=3
+tread function=flat
+
+step ends
+
+# step group 2
+
+step starts
+
+tread length=10
+riser height=3
+riser length=1
+tread function=SIN1+COS2
+
+step ends
+

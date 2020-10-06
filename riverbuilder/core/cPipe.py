@@ -45,7 +45,7 @@ class Pipe:
                             key - x value; value - y values set
         '''
         self.x_len = x_len
-        self.dx = dx
+        self.dx = 1
         self.x_slope = x_slope
         self.x_v = None
         self.x_index = np.array(list(range(ceil(x_len/dx))))
@@ -74,6 +74,54 @@ class Pipe:
             def fun(x):
                 return x, np.array([0]*len(x))
         self.x_v, self.y_center = self.createCenterline(fun)
+
+
+    def setCenterlineManual(self, y_v, x_v=None):
+        ''' Manually set the centerline to y_v.
+            If x_v is None, the original x_len will be used to
+                calculate the x_v.
+            If x_v is not None, it will replace the original x_v.
+            The length of y_v will be cut or extend to match the length of x_v.
+
+            y_v - numpy array; y values of the centerline
+            x_v - numpy array; x values of the centerline
+        '''
+        if x_v is not None:
+            self.x_v = x_v
+        else:
+            def fun(x):
+                return x, np.array([0]*len(x))
+            self.x_v, dummy = self.createCenterline(fun)
+
+        diff = len(y_v) - len(self.x_v)
+        if diff >= 0:
+            self.y_center = y_v[:len(self.x_v)]
+        else:
+            self.y_center = np.concatenate((y_v, np.array([y_v[-1]]*(-diff))))
+
+
+    def smoothCenterline(self, degree=1):
+        ''' Smoothen centerline by taking average of neighbors.
+
+        Input:
+        degree - number of neighbors to take average 
+                    (1 means 1 left neighbor and 1 rightneighbor,
+                     so 3 points in total.)
+        '''
+        if degree == 0:
+            return
+
+        y_v = self.getCenterline_y()
+        out = np.array([0.0]*len(y_v))
+        for i in range(len(y_v)):
+            left = i-degree
+            right = i+degree+1
+            if left < 0:
+                left = 0
+            if right > len(y_v):
+                right = len(y_v)
+            out[i] = np.average(y_v[left:right])
+        self.y_center = out
 
 
     def getCenterline_y(self):
@@ -123,6 +171,18 @@ class Pipe:
         return s_center[-1]
 
 
+    def getDynamicPipeSlope(self):
+        '''
+        calculate the pipe slope of every point based on the sinuosity.
+        '''
+        x_v = self.getCenterline_x()
+        s_v = self.getCenterline_sn()
+        delta_x_v = np.concatenate((np.array([1]), x_v[1:] - x_v[0:-1]))
+        delta_s_v = np.concatenate((np.array([1]), s_v[1:] - s_v[0:-1]))
+
+        return self.x_slope * delta_x_v / delta_s_v
+
+
     def getPipeSlope(self):
         '''Return pipe slope'''
         s_center = self.getCenterline_sn()
@@ -133,14 +193,14 @@ class Pipe:
 
     def getSL(self):
         '''Return sinuosity of centerline'''
-        return self.get_s_len() / (self.x_len-1)
+        return self.s_center[-1] / self.x_v[-1]
 
 
     def setLevel(self, z_offset, z_start, y_offset, direction, yfun=None, innerPipe=False):
         '''Add one more level of level in a certain direction
 
         z_offset -- float; offset on z direction
-        z_start -- float; previous elevation at the starting point
+        z_start -- array; z values of previous level
         y_offset -- float; offset on y direction
         direction -- "left" or "right"
         yfun -- function to calculate y values of level
@@ -148,15 +208,23 @@ class Pipe:
         '''
         x_v = self.getCenterline_x()
         y_v = self.getCenterline_y()
-        start = np.array([0]*len(x_v))
 
         if self.levels_n[direction] != []:
+#            print('level n', self.levels_n[direction])
+#            print('level x', len(self.levels_x[direction]))
+#            print('level y', len(self.levels_y[direction]))
             start = self.levels_n[direction][-1]
+            prevLevel_x = self.levels_x[direction][-1]
+            prevLevel_y = self.levels_y[direction][-1]
+        else:
+            start = np.array([0]*len(x_v))
+            prevLevel_x = self.x_v
+            prevLevel_y = self.getCenterline_y()
 
         level_x, level_y, level_n = self.addLevelOffset(x_v, y_v, start, y_offset, direction, self.getCenterline_sn(), yfun)
         innerPipePoints = {}
         level_x, level_y, ends_origin, innerPipePoints = self.levelCleanUp(level_x, level_y, x_v, y_v, direction, start, level_n, innerPipe)
-        level_z = self.addTopOffset(z_start, self.x_slope, level_x, z_offset, direction)
+        level_z = self.addTopOffset(level_x, level_y, prevLevel_x, prevLevel_y, z_start, z_offset)
 
         self.levels_n[direction].append(level_n)
         self.levels_x[direction].append(level_x)
@@ -256,8 +324,8 @@ class Pipe:
         points_end = [(int(round(level_x[i])), int(round(level_y[i]))) for i in range(len(level_x))]
         slope_min = np.amin(self.getSlope())
         slope_max = np.amax(self.getSlope())
-        if slope_min == slope_max:
-            return level_x, level_y, points_end, {}
+#        if slope_min == slope_max:
+#            return level_x, level_y, points_end, {}
 
         previous_x, previous_y = start_x, start_y
 
@@ -321,19 +389,23 @@ class Pipe:
         return vector
 
 
-    def addTopOffset(self, start, slope, x_v, offset, direction):
-        '''Return z offset of level.
+    def addTopOffset(self, newLevel_x, newLevel_y, prevLevel_x, prevLevel_y, prevLevel_z, offset):
+        ''' Calculate the height of a new added level.
 
-        This has to be called after calling addlevelOffset.
+            The height is calculated from its previous level and
+                the slope of the pipe.
         '''
-        if len(self.levels_z[direction]) == self.levels_y[direction]:
-            print("addTopOffset function has been called more than expected!")
-            return
+        newLevel_z = np.empty(len(newLevel_x))
 
-#        print('start', start, 'offset', offset)
-        z_v = start - x_v*slope + offset
-#        print('z_v[0]', z_v[0], 'x_v[0]', x_v[0])
-        return z_v
+        for i in range(len(newLevel_x)):
+            x = newLevel_x[i]
+            y = newLevel_y[i]
+
+            dist = np.square(prevLevel_x - x) + np.square(prevLevel_y - y)
+            minIndex = np.argmin(dist)
+            newLevel_z[i] = prevLevel_z[minIndex] + offset
+
+        return newLevel_z
 
 
     def commonX(self, v0, v1, covered):

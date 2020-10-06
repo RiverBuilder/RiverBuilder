@@ -59,7 +59,8 @@ def maskCheck(array, mask):
             if not dist.isdigit():
                 return default_out
 
-            dist = int(int(dist)/xmax*arr_len)
+            dist = int(dist)
+            #dist = int(int(dist)/xmax*arr_len)
             if len(out) != 0:
                 if dist <= out[-1][0]:
                     i += 1  #skip the following switch
@@ -110,6 +111,7 @@ def maskCalculate(y_v, x_v, mask):
         end = rang[1]
         on = rang[2]
 
+        #print(start, end)
         for i in range(start, end):
             if on:
                 out_x.append(x_v[i])
@@ -118,8 +120,10 @@ def maskCalculate(y_v, x_v, mask):
                 # reset x:
                 a = (i-start) / (end-start)
                 if end == len(x_v):
+                    a = (i-start) / (end-start-1)
                     out_x.append(x_v[start]*(1-a) + x_v[end-1]*a)
                 else:
+                    a = (i-start) / (end-start)
                     out_x.append(x_v[start]*(1-a) + x_v[end]*a)
                 out_y.append(default_y)
 
@@ -597,3 +601,243 @@ def angle_between(v1, v2):
     v2_u = unit_vector(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
+
+def indexBound(x, x_v_sort):
+    ind1 = ind2 = len(x_v_sort) - 1
+    for i in range(len(x_v_sort)):
+        if x_v_sort[i] == x:
+            ind1 = ind2 = i
+            break
+        elif x_v_sort[i] > x:
+            ind1 = i - 1
+            ind2 = i
+            if ind1 < 0:
+                ind1 = 0
+            break
+
+    return ind1, ind2
+
+
+#def deleteCycles(line):
+#    '''
+#    line - list of points, each point is (x, y, ...),
+#            the order of points is the trend of the line
+#    '''
+#    lineGrows_positive = []
+#    lineGrows_negative = []
+#    circles_index = {}
+#    lst_pt = (line[0][0], line[0][1], 0)
+#
+#    for i in range(1, len(line)):
+#        crt_pt = (line[i][0], line[i][1], i)
+#        if int(crt_pt[0]) < 0:
+#            extend = updateLine(lineGrows_negative, crt_pt, i)
+#        else:
+#            extend = updateLine(lineGrows_positive, crt_pt, i)
+#
+#        if extend:
+#            lst_pt = crt_pt
+#            continue
+#
+#        ind1, ind2 = detectCycle(lineGrows_positive, lineGrows_negative, line, crt_pt, lst_pt)
+#
+#        if ind1 != -1:
+#            #print(ind1+1, ind2-1)
+#            circles_index[ind1+1] = ind2-1
+#
+#        lst_pt = crt_pt
+#
+#    if circles_index == {}:
+#        return line
+#
+#    clean_line = []
+#    outCircleMarker = [True for i in range(len(line))]
+#    for key in circles_index.keys():
+#        left = key
+#        right = circles_index[key]
+#        for i in range(left, right+1):
+#            outCircleMarker[i] = False
+#
+#    clean_line = [line[i] for i in range(len(outCircleMarker)) if outCircleMarker[i]]
+#
+#    return clean_line
+
+
+def deleteCycles(line):
+    '''
+    line - list of points, each point is (x, y, ...),
+            the order of points is the trend of the line
+    '''
+    clean_line = []
+    line_copy = [x for x in line]
+    pointsDict = {}
+    cycleIndex = []
+
+    line_copy = completeLine(line_copy)
+    for i in range(0, len(line_copy)):
+        crt_pt = line_copy[i]
+        crt_pt_xy = (crt_pt[0], crt_pt[1])
+        if crt_pt_xy in pointsDict:
+            ind1 = pointsDict[crt_pt_xy]
+            cycleIndex.append((ind1, i))
+        else:
+            pointsDict[crt_pt_xy] = i
+
+    line_marker = [True for i in range(len(line_copy))]
+    for (left, right) in cycleIndex:
+        for i in range(left+1, right):
+            line_marker[i] = False
+
+    clean_line = [line_copy[i] for i in range(len(line_copy)) if line_marker[i]]
+
+    return clean_line
+        
+
+def completeLine(ln):
+    '''
+    1. Round points in ln to int (only x and y values)
+    2. Remove duplicate points in ln (if both x and y matches)
+    '''
+    out_ln = [(round(ln[0][0]), round(ln[0][1]), ln[0][2])]
+    lst_pt = out_ln[0]
+    for i in range(1, len(ln)):
+        crt_pt = (round(ln[i][0]), round(ln[i][1]), ln[i][2])
+        lst_pt_xy = (lst_pt[0], lst_pt[1])
+        crt_pt_xy = (crt_pt[0], crt_pt[1])
+
+        if lst_pt_xy == crt_pt_xy:
+            continue
+        
+        diff_x = abs(lst_pt_xy[0] - crt_pt_xy[0])
+        diff_y = abs(lst_pt_xy[1] - crt_pt_xy[1])
+
+        if diff_x >= 2 or diff_y >= 2:
+            steps = max(diff_x, diff_y)
+            for t in range(1, steps+1):
+                alpha = t/steps
+                x = round(lst_pt[0]*(1-alpha) + crt_pt[0]*alpha)
+                y = round(lst_pt[1]*(1-alpha) + crt_pt[1]*alpha)
+                z = lst_pt[2]*(1-alpha) + crt_pt[2]*alpha
+                out_ln.append((x, y, z))
+        elif diff_x == diff_y:
+            out_ln.append((lst_pt[0], crt_pt[1], crt_pt[2]))
+            out_ln.append(crt_pt)
+        else:
+            out_ln.append(crt_pt)
+
+        lst_pt = crt_pt
+
+    return out_ln
+
+
+def updateLine(linelist, pt, index):
+    '''
+    linelist - [[(x, y, ind)], ...] x is index of the list
+    pt - (x, y)
+    '''
+    extend = False
+    round_x = abs(int(pt[0]))
+    if round_x >= len(linelist):
+        linelist += [[] for i in range(round_x - len(linelist)+1)] 
+        extend = True
+
+    linelist[round_x].append((pt[0], pt[1], index))
+    linelist[round_x].sort()
+
+    return extend
+
+
+#def detectCycle(line_positive, line_negative, orig_line, crt_pt, lst_pt):
+#    '''
+#    crt_pt - (x, y, index)
+#    lst_pt - (x, y, index)
+#    '''
+# #vectorIntersect(v1_p1, v1_p2, v2_p1, v2_p2):
+#    crt_x = int(crt_pt[0])
+#    if crt_x < 0 :
+#        used_line = line_negative
+#    else:
+#        used_line = line_positive
+#
+#    crt_x = abs(crt_x)
+#    ind_crt_pt = used_line[crt_x].index(crt_pt)
+#    cls_pt = lst_pt
+#    ind_cls_pt = ind_crt_pt
+#    cls_pt_orig_ind = crt_pt[2] + 1
+#    check_ind = cls_pt_orig_ind
+#    check_x = crt_x
+#
+#    while cls_pt_orig_ind == check_ind:
+#
+#        if used_line[check_x] == []:
+#            check_x += 1
+#            ind_cls_pt = 0
+#            continue
+#
+#        if ind_cls_pt != len(used_line[check_x]):
+#            cls_pt = used_line[check_x][ind_cls_pt]
+#            ind_cls_pt += 1
+#            cls_pt_orig_ind = cls_pt[2]
+#            check_ind -= 1
+#        elif check_x != len(used_line) - 1:
+#            check_x += 1
+#            ind_cls_pt = 0
+#        else:
+#            return -1, -1
+#
+#    left_bound = cls_pt_orig_ind - 2
+#    if left_bound < 0:
+#        left_bound = 0
+#    right_bound = cls_pt_orig_ind + 2
+#
+#    v1_p1 = (lst_pt[0], lst_pt[1])
+#    v1_p2 = (crt_pt[0], crt_pt[1])
+#    for i in range(left_bound+1, right_bound):
+#        v2_p1 = (orig_line[i-1][0], orig_line[i-1][1])
+#        v2_p2 = (orig_line[i][0], orig_line[i][1])
+#
+##        print(v1_p1, v1_p2, v2_p1, v2_p2)
+#        if vectorIntersect(v1_p1, v1_p2, v2_p1, v2_p2):
+##            print('bound', left_bound+1, right_bound, crt_pt[2])
+#            return i-1, crt_pt[2]
+#
+#    return -1, -1
+
+def perlin2D(x,y,seed=1):
+    # permutation table
+    #np.random.seed(seed)
+    p = np.arange(256,dtype=int)
+    np.random.shuffle(p)
+    p = np.stack([p,p]).flatten()
+    # coordinates of the top-left
+    xi = x.astype(int)
+    yi = y.astype(int)
+    # internal coordinates
+    xf = x - xi
+    yf = y - yi
+    # fade factors
+    u = fade(xf)
+    v = fade(yf)
+    # noise components
+    n00 = gradient(p[p[xi]+yi],xf,yf)
+    n01 = gradient(p[p[xi]+yi+1],xf,yf-1)
+    n11 = gradient(p[p[xi+1]+yi+1],xf-1,yf-1)
+    n10 = gradient(p[p[xi+1]+yi],xf-1,yf)
+    # combine noises
+    x1 = lerp(n00,n10,u)
+    x2 = lerp(n01,n11,u) # FIX1: I was using n10 instead of n01
+    return lerp(x1,x2,v) # FIX2: I also had to reverse x1 and x2 here
+
+def lerp(a,b,x):
+    "linear interpolation"
+    return a + x * (b-a)
+
+def fade(t):
+    "6t^5 - 15t^4 + 10t^3"
+    return 6 * t**5 - 15 * t**4 + 10 * t**3
+
+def gradient(h,x,y):
+    "grad converts h to the right gradient vector and return the dot product with (x,y)"
+    vectors = np.array([[0,1],[0,-1],[1,0],[-1,0]])
+    g = vectors[h%4]
+    return g[:,:,0] * x + g[:,:,1] * y

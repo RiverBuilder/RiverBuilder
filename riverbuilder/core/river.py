@@ -36,6 +36,7 @@ ALLOWFUN = set(["MASK", "SIN", "COS", "LINE", "PERLIN", "SINSQ", "COSSQ", "CNOID
 FUNPARANUM = {"SIN":4, "COS":4, 'SINSQ':4, 'COSSQ':4, "LINE":3, "PERLIN":4, "CNOIDAL":5, "STEP":5,
         "HIGHCURV": 5}
 XSHAPES = set(['AU', 'SU', 'EN'])
+ADDON = {'BEG':[], 'CD':[]}
 
 
 def defaultFunction(x):
@@ -63,10 +64,18 @@ def fileParser(fname):
         sys.exit()
 
     lines = f.readlines()
+    addonSet = ADDON.keys()
+    p = re.compile('[A-Z]+')
     for line in lines:
         if line.startswith('#') or '=' not in line:
             continue
         [name, val] = line.strip().split('=')
+        # check if it is an add-on:
+        m = p.match(name)
+        if m.group() is not None and m.group() in addonSet:
+            ADDON[m.group()].append(val)
+            continue
+
         if name not in outdict:
             outdict[name] = val
         else:
@@ -180,10 +189,10 @@ def forgeFun(name, val):
 def buildFunDict(fdict):
     '''Given a dictionary, extract and parse all allowed functions in it and return a new dictionary
 
-    fdict -- dictionary that may contains allow functions which are in str type.
+    fdict -- dictionary that may contains allowed functions which are in str type.
 
     Return:
-    funDict -- dictionary that contains allow functions which values are callable functions.
+    funDict -- dictionary that contains allowed functions which values are callable functions.
     log -- str that record all successfully parsed functions and alert msg.
 
     Constrains:
@@ -193,6 +202,7 @@ def buildFunDict(fdict):
     p = re.compile('[A-Z]+')
     funDict = {}
 
+    notMaskFuns = []
     for name, val in fdict.items():
         if not isinstance(val, str):
             continue
@@ -211,8 +221,12 @@ def buildFunDict(fdict):
             if not funValCheck(m.group(), val):
                 log += "Can't parse function "+ name +'\n'
                 continue
-            funParas = getfunParas(val, funDict)
-            funDict[name] = forgeFun(m.group(), funParas)
+
+            notMaskFuns.append([name, m.group(), val])
+
+    for [name, funType, val] in notMaskFuns:
+        funParas = getfunParas(val, funDict)
+        funDict[name] = forgeFun(funType, funParas)
 
     log += "User defined funtions are:\n"
     for fun in funDict:
@@ -291,7 +305,7 @@ def inputCheck(fdict):
     fdict, info = paraCheck(fdict, "Inner Channel Lateral Offset Minimum", 10, "float", 1)
     log += info
     log += printPara("Inner Channel Lateral Offset Minimum", fdict)
-    fdict, info = paraCheck(fdict, "Inner Channel Depth Minimum", 0, "float", 1)
+    fdict, info = paraCheck(fdict, "Inner Channel Depth Minimum", 0, "float", 0)
     log += info
     log += printPara("Inner Channel Depth Minimum", fdict)
     fdict, info = paraCheck(fdict, "Median Sediment Size (D50)", 0.01, "float", 1)
@@ -316,6 +330,9 @@ def inputCheck(fdict):
     log += info
     log += printPara("Inner Channel Average Bankfull Depth", fdict)
     fdict, info = paraCheck(fdict, "River Slope", None, "float", 1)
+    log += info
+    log += printPara("River Slope", fdict)
+    fdict, info = paraCheck(fdict, "Smooth", 0, "int", 1)
     log += info
     log += printPara("River Slope", fdict)
     log += ''
@@ -434,10 +451,8 @@ def addLevels(pattern, fdict, funDict, default_fun,direction, obj):
 
         z_pre = obj.getLevel('z', direction, -1)
         x_pre = obj.getLevel('x', direction, -1)
-        z_start = z_pre[0]
         x_start = x_pre[0]
-        z_start += x_start * fdict["Valley Slope (Sv)"]
-        obj.setLevel(z_offset,z_start, y_offset, direction, fun)
+        obj.setLevel(z_offset, z_pre, y_offset, direction, fun)
         if funName in fdict:
             log += "Creating "+name[:-22]+"with function: "+str(fdict[funName])+'\n'
         else:
@@ -587,8 +602,8 @@ def buildChannel(fdict, funDict):
     if reshape:
         c.shapeCenterline(valleyfun)
 
+    c.smoothCenterline(fdict['Smooth'])
     log += "Creating Meandering Center line with Function:"+fdict.get("Meandering Centerline Function", "None")+'\n'
-
 
     if fdict["Inner Channel Depth Minimum"] != 0:
         c.setHbfManual(fdict["Inner Channel Depth Minimum"])
@@ -659,7 +674,7 @@ def buildChannel(fdict, funDict):
     c, info = addLevels(pattern, fdict, funDict, None, 'right', c)
     log += info
 
-    #Cross-Sectional Shape Calculation:
+    #################### Cross-Sectional Shape Calculation ################################
     ckey = 'Cross-Sectional Shape'
     if ckey not in fdict:
         log += 'Alert! Cross-Sectional Shape not specified! Use asymmetric shape as default.\n'
@@ -685,6 +700,71 @@ def buildChannel(fdict, funDict):
         c.setXShape(fdict['TZ(n)'])
         c.setTZ(fdict['TZ(n)'])
 
+    #################### Bed Roughness ################################
+    if 'PBR' in fdict:
+        fdict, info = paraCheck(fdict, "PBR", 5, "float")
+        c.perlinThalweg(fdict['PBR'])
+
+    return c, log
+
+
+def addBedElement(c, paras):
+    log = ''
+    paras = paras[1:-1]
+    paras = paras.split(',')
+    paras = [i.strip() for i in paras]
+
+    if len(paras) != 4:
+        log += "Number of parameters given to BEG doesn't equal to 4.\n"
+        log += 'Given parameters should be in form: (val1, val2, val3, val4)\n'
+        return log
+
+    [num, size_mean, size_std, height] = paras
+    try:
+        num = int(num)
+        size_mean = int(size_mean)
+        size_std = int(size_std)
+        height = float(height)
+    except ValueError:
+        log += "Cannot parsed given parameters in BEG.\n"
+        return log
+
+    c.addBoulders(num, size_mean, size_std, height)
+    return log
+
+
+def addCheckDam(c, paras):
+    log = ''
+    paras = paras[1:-1]
+    paras = paras.split(',')
+    paras = [i.strip() for i in paras]
+
+    if len(paras) != 3:
+        log += "Number of parameters given to CD doesn't equal to 3.\n"
+        log += 'Given parameters should be in form: (val1, val2, val3)\n'
+        return log
+
+    [loc, height, thickness] = paras
+    try:
+        loc = int(loc)
+        height = int(height)
+        thickness = int(thickness)
+    except ValueError:
+        log += "Cannot parsed given parameters in BEG.\n"
+        return log
+
+    c.addCheckDam(loc, height, thickness)
+    return log
+
+def addChannelElements(c, addon):
+    ADDONMETHOD = {'BEG': addBedElement,
+                    'CD': addCheckDam}
+
+    log = ''
+    for key, values in ADDON.items():
+        if values != []:
+            for value in values:
+                log += ADDONMETHOD[key](c, value)
     return c, log
 
 
@@ -717,17 +797,17 @@ def buildValley(fdict, funDict, channel):
     lboffset = fdict['Left Valley Boundary Lateral Offset Minimum']
     lbheight = fdict['Left Valley Boundary Height Offset']
     if valley.levels_z['left'] == []:
-        z_start = channel.levels_z['left'][-1][0]
+        z_start = channel.levels_z['left'][-1]
     else:
-        z_start = valley.levels_z['left'][-1][0]
+        z_start = valley.levels_z['left'][-1]
     valley.setValleyBoundary(lbheight, z_start, lboffset, 'left', None)
 
     rboffset = fdict['Right Valley Boundary Lateral Offset Minimum']
     rbheight = fdict['Right Valley Boundary Height Offset']
     if valley.levels_z['right'] == []:
-        z_start = channel.levels_z['right'][-1][0]
+        z_start = channel.levels_z['right'][-1]
     else:
-        z_start = valley.levels_z['right'][-1][0]
+        z_start = valley.levels_z['right'][-1]
     valley.setValleyBoundary(rbheight, z_start, rboffset, 'right', None)
     return valley, log
 
@@ -779,6 +859,11 @@ def buildRiver(fname, outfolder, log):
         print("Start Creating River Channel...")
         t1 = datetime.now()
         channel, info = buildChannel(paraDict, funDict)
+        log += info
+        log += '\n'
+
+        print("Start adding add-ons to Channel...")
+        channel, info = addChannelElements(channel, ADDON)
         log += info
         log += '\n'
 
