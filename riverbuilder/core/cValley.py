@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 class Valley(Pipe):
 
-    def __init__(self, x_len=100, channel=Channel(), x_slope=0.01, dx=1):
+    def __init__(self, channel=Channel()):
         '''Initiator for Valley class
 
         x_len -- length of valley in x direction
@@ -32,74 +32,26 @@ class Valley(Pipe):
         channelCenter_y -- y values for the points of channel centerline
         '''
         self.channel = channel
-        super().__init__(int(x_len), x_slope, int(dx))
+        super().__init__(int(channel.x_len), channel.x_slope, channel.dx, channel.zd)
         self.channelCenter_x = channel.x_v
         self.channelCenter_y = channel.getCenterline_y()
-
-
-    def setLevel(self, z_offset, z_start, y_offset, direction, yfun=None):
-        '''Rewrite the setlevel function, the main idea is to check if channel is reshaped.
-
-        Also, the offset need to be recalculate for the first time.
-        '''
-        dir_mod = {'left':1, 'right':-1}
-
-        if self.levels_y[direction] == []:
-            bank_x = self.channel.getLevel('x', direction, -1)
-            bank_y = self.channel.getLevel('y', direction, -1)
-
-            y_max = 0
-            y_center = self.getCenterline_y()
-            for i in range(len(bank_x)):
-                ind = int(bank_x[i])
-                if ind >= len(y_center):
-                    continue
-                y = bank_y[i]
-                dy = (y - y_center[ind]) * dir_mod[direction]
-                if dy > y_max:
-                    y_max = dy
-
-            self.levels_n[direction].append(np.array([y_max*dir_mod[direction]]*len(self.x_v)))
-            self.levels_x[direction].append(self.x_v)
-            self.levels_y[direction].append(self.y_center)
-            super().setLevel(z_offset, z_start, y_offset, direction, yfun)
-            self.levels_n[direction].pop(0)
-            self.levels_x[direction].pop(0)
-            self.levels_y[direction].pop(0)
-        else:
-            super().setLevel(z_offset, z_start, y_offset, direction, yfun)
+        self.setThalweg(zd=(-1*channel.zd))
 
 
     def setValleyBoundary(self, z_offset, z_start, y_offset, direction, yfun=None):
-        '''Set most outer boundary of valley.
-            It works the same as set an additional level, only two reminders:
-            1. It should be called after adding all levels.
-            2. It is parallel to the valley canterline, and the offset is the 
-                added to the maximum point of the most outside level.
-        '''
-        if self.levels_y[direction] == []:
-            self.setLevel(z_offset, z_start, y_offset, direction, yfun=None)
-            return
+        z_start = np.zeros(len(self.x_v))
+        z_max = np.amax(self.channel.levels_z[direction][-1])*self.dx
+        z_offset += z_max
 
-        dir_mod = {'left':1, 'right':-1}
+        if direction == 'left':
+            y_max = np.amax(self.channel.levels_y[direction][-1])*self.dx
+            y_offset += y_max
+        else:
+            y_max = np.amin(self.channel.levels_y[direction][-1])*self.dx
+            y_offset = abs(y_max - y_offset)
 
-        y_max = 0
-        y_center = self.getCenterline_y()
-        bank_x = self.levels_x[direction][-1]
-        bank_y = self.levels_y[direction][-1]
 
-        for i in range(len(bank_x)):
-            ind = int(bank_x[i])
-            if ind >= len(y_center):
-                continue
-            y = bank_y[i]
-            dy = abs(y - y_center[ind])
-            if dy > y_max:
-                y_max = dy
-
-        self.levels_n[direction].append(np.array([y_max*dir_mod[direction]]*len(self.x_v)))
         super().setLevel(z_offset, z_start, y_offset, direction, yfun)
-        self.levels_n[direction].pop(-2)
 
 
     def getLevel(self, dictkey, direction, ind=None):
@@ -174,13 +126,13 @@ class Valley(Pipe):
         y = []
         z = []
         for i in range(0, len(self.levels_y['left'])):
-            y.append(self.levels_y['left'][-1*i-1][minInd])
-            z.append(self.levels_z['left'][-1*i-1][minInd])
+            y.append(self.levels_y['left'][-1*i-1][minInd]*self.dx)
+            z.append(self.levels_z['left'][-1*i-1][minInd]*self.dx)
 
         for i in range(0, len(self.channel.levels_y['left'])):
             ind = np.argmin(np.absolute(self.channel.levels_x['left'][-1*i-1] - minInd_x))
-            y.append(self.channel.levels_y['left'][-1*i-1][ind])
-            z.append(self.channel.levels_z['left'][-1*i-1][ind])
+            y.append(self.channel.levels_y['left'][-1*i-1][ind]*self.dx)
+            z.append(self.channel.levels_z['left'][-1*i-1][ind]*self.dx)
 
         indLeft = np.argmin(np.absolute(self.channel.levels_x['left'][0] - minInd_x))
         indRight = np.argmin(np.absolute(self.channel.levels_x['right'][0] - minInd_x))
@@ -190,17 +142,21 @@ class Valley(Pipe):
         else:
             channel_y, channel_z = self.channel.suXShape(ind, wbf, self.channel.tz, self.channel.xshapePoints)
         channel_y = channel_y + (self.channel.levels_y['left'][0][indLeft] + self.channel.levels_y['right'][0][indRight])/2
+
+        channel_y = channel_y*self.dx
+        channel_z = channel_z*self.dx
+
         y += channel_y.tolist()
         z += channel_z.tolist()
 
         for i in range(0, len(self.channel.levels_y['right'])):
             ind = np.argmin(np.absolute(self.channel.levels_x['right'][i] - minInd_x))
-            y.append(self.channel.levels_y['right'][i][ind])
-            z.append(self.channel.levels_z['right'][i][ind])
+            y.append(self.channel.levels_y['right'][i][ind]*self.dx)
+            z.append(self.channel.levels_z['right'][i][ind]*self.dx)
 
         for i in range(0, len(self.levels_y['right'])):
-            y.append(self.levels_y['right'][i][minInd])
-            z.append(self.levels_z['right'][i][minInd])
+            y.append(self.levels_y['right'][i][minInd]*self.dx)
+            z.append(self.levels_z['right'][i][minInd]*self.dx)
 
         fig, ax = plt.subplots(1, 1)
         fig.suptitle('Valley X-Shape')
@@ -216,7 +172,8 @@ class Valley(Pipe):
         out = [header]
         xyz = self.tolist_all()
 
-        xyz_out = [[round(xyz[0][i],3), round(xyz[1][i], 3), round(xyz[2][i], 3), xyz[3][i]] for i in range(len(xyz[0]))]
+        xyz_out = [[round(xyz[0][i]*self.dx,3), round(xyz[1][i]*self.dx, 3), round(xyz[2][i]*self.dx, 3), xyz[3][i]] for i in range(len(xyz[0]))]
+#        xyz_out = [[round(xyz[0][i],3), round(xyz[1][i], 3), round(xyz[2][i], 3), xyz[3][i]] for i in range(len(xyz[0]))]
         out += xyz_out
 
         with open(outfile+".csv", 'w') as cf:
@@ -237,10 +194,10 @@ class Valley(Pipe):
         s += 'Valley Slope:'+str(slope)+'\n'
 
         for i in range(0, len(self.levels_n['left'])):
-            s += 'Average Wbf of '+'L'+str(i)+' Valley Level is: '+str(round(np.average(self.levels_n['left'][i]),3)) + '\n'
+            s += 'Average Width of '+'L'+str(i)+' Valley Level is: '+str(round(np.average(self.levels_n['left'][i])*self.dx,3)) + '\n'
             
         for i in range(0, len(self.levels_n['right'])):
-            s += 'Average Wbf of '+'R'+str(i)+' Valley Level is: '+str(abs(round(np.average(self.levels_n['right'][i]), 3))) + '\n'
+            s += 'Average Width of '+'R'+str(i)+' Valley Level is: '+str(abs(round(np.average(self.levels_n['right'][i]*self.dx), 3))) + '\n'
 
         return s
 ###########################################################

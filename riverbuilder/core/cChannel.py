@@ -20,7 +20,7 @@ import sys
 
 class Channel(Pipe):
 
-    def __init__(self, x_len=100, wbf_min=0, valley_slope=0.01, dx=1):
+    def __init__(self, x_len=100, wbf_min=0, valley_slope=0.01, dx=1, zd=1000):
         '''Channel class initiator
 
         x_len -- int; valley length in x direction
@@ -40,11 +40,10 @@ class Channel(Pipe):
         dynamicCurv -- array; values of curvature of center line
         tz -- int; trapezoid xshape bottom points. -1 means asymetric
         '''
-        super().__init__(int(x_len), valley_slope, int(dx))
-        self.wbf_min = wbf_min
+        super().__init__(int(x_len), valley_slope, dx, zd)
+        self.wbf_min = wbf_min/dx
         self.turns_center = []
         self.hbf = None
-        self.thalweg = None
         self.curvature = None
         self.xshapePoints = 21
         self.xshape_x = None
@@ -65,6 +64,7 @@ class Channel(Pipe):
         x_v_valley.sort()
         x_v_valley = np.array(x_v_valley)
         x_v_valley, y_v = fun(x_v_valley)
+        y_v = y_v/self.dx
         x_max = np.amax(x_v_valley)
 
         out_x, out_y = [], []
@@ -94,12 +94,12 @@ class Channel(Pipe):
 
     def setHbfManual(self, hbf):
         '''Mannually set self.hbf'''
-        self.hbf = hbf
+        self.hbf = hbf/self.dx
 
 
     def setHbf(self, d50=0.01, css=0.047, g_s=1922, g_w=1000):
         '''Automatically calculate Hbf'''
-        self.hbf = functions.shields(d50, css, self.getRiverSlope(), g_s, g_w)
+        self.hbf = functions.shields(d50, css, self.getRiverSlope(), g_s, g_w)/self.dx
 
 
     def getHbf(self):
@@ -111,38 +111,6 @@ class Channel(Pipe):
 
     def setTZ(self, n):
         self.tz = n
-
-
-    def setThalweg(self, zd=1000, fun=np.vectorize(lambda x : 0)):
-        '''Calculate z values for thalweg
-
-        zd -- Datum
-        fun -- function used to calculate thalweg
-
-        Value will be modified:
-        self.thalweg
-        '''
-        hbf = self.getHbf()
-        s_v = self.getCenterline_sn()
-        x, y = fun(s_v)
-        dynamicSlope = self.getDynamicPipeSlope()
-        delta_s_v = np.concatenate((np.array([0]), s_v[1:] - s_v[0:-1]))
-        delta_z = np.multiply(dynamicSlope, delta_s_v)
-        z_v = np.empty_like(delta_z)
-        z_v[0] = 0
-        for i in range(1, len(z_v)):
-            z_v[i] = z_v[i-1] + delta_z[i]
-
-        self.channelUndulation = z_v
-        self.thalweg = y - z_v + zd
-#        self.thalweg = hbf*y + hbf - self.getRiverSlope()*s_v + zd
-
-
-    def getThalweg(self):
-        '''Return self.thalweg'''
-        if self.thalweg is None:
-            self.setThalweg()
-        return self.thalweg
 
 
     def setCurvature(self, fun):
@@ -161,12 +129,11 @@ class Channel(Pipe):
         return self.dynamicCurv
 
 
-    def createInnerChannel(self, leftFun=None, rightFun=None, zd=1000, thalwegFun=np.vectorize(lambda x : 0)):
+    def createInnerChannel(self, leftFun=None, rightFun=None, thalwegFun=None):
         '''Create most inner channel of river
 
         leftFun -- function to calculate left inner bank
         rightFun -- function to calculate right innert bank
-        zd -- Datum
         thalwegFun -- function to calculate thalweg
 
         Value will be modified:
@@ -175,30 +142,18 @@ class Channel(Pipe):
         self.levels_z
         self.levels_n
         '''
-        self.setThalweg(zd, thalwegFun)
+        self.setThalweg(thalwegFun)
 
         thalweg = self.getThalweg()
-        thalweg_max = np.amax(thalweg)
-        thalweg_max_index = np.argmax(thalweg)
-        z_start = np.empty_like(thalweg)
-        for i in range(len(z_start)):
-            z_start[i] = thalweg_max + self.channelUndulation[thalweg_max_index] - self.channelUndulation[i]
+        orig_thalweg = thalweg+self.channelUndulation
+        thalweg_max = np.amax(orig_thalweg)
+        z_start = thalweg_max - self.channelUndulation
 
-        hbf = self.getHbf()
-        wbf = self.wbf_min/2
+        hbf = self.getHbf()*self.dx
+        wbf = self.wbf_min/2*self.dx
 
         self.setLevel(hbf, z_start, wbf, 'left', leftFun, True)
         self.setLevel(hbf, z_start, wbf, 'right', rightFun, True)
-
-
-    def getHeight(self, direction):
-        '''Return z value of most outer bank of river
-
-        direction -- "left" or "right"
-        '''
-        if self.levels_z[direction] == []:
-            self.createInnerChannel()
-        return np.amax(self.levels_z[direction][-1])
 
 
     def getAveWbf(self):
@@ -206,7 +161,7 @@ class Channel(Pipe):
         if self.levels_y['left'] == []:
             self.createInnerChannel()
         bf = self.levels_n['left'][0] + np.absolute(self.levels_n['right'][0])
-        return np.average(bf)
+        return np.average(bf)*self.dx
 
 
     def getAveHbf(self):
@@ -214,31 +169,28 @@ class Channel(Pipe):
         if self.levels_y['left'] == []:
             self.createInnerChannel()
         thalweg = self.getThalweg()
-        thalweg_max = np.amax(thalweg)
-        flat_thalweg = thalweg + self.getRiverSlope()*self.s_center
-        diff = np.amax(flat_thalweg) - flat_thalweg[0]
-        z_start = thalweg_max + diff
-        bank = z_start + self.getHbf() - self.x_v * self.x_slope
-        return np.average(bank - thalweg)
+        flat_thalweg = thalweg + self.channelUndulation
+        thalweg_max = np.amax(flat_thalweg)
+        diff = thalweg_max - flat_thalweg
+        return (np.average(diff) + self.getHbf())*self.dx
 
 
     def getCoWbf(self):
         '''Return coefficient of variation of bankfull width.'''
         ave = self.getAveWbf()
-        std = np.std(self.levels_n['left'][0] + np.absolute(self.levels_n['right'][0]))
+        std = np.std(self.levels_n['left'][0]*self.dx + (np.absolute(self.levels_n['right'][0])*self.dx))
+
         return std/ave
 
 
     def getCoHbf(self):
         '''Return coefficient of variation of bankfull width.'''
         thalweg = self.getThalweg()
-        thalweg_max = np.amax(thalweg)
-        flat_thalweg = thalweg + self.getRiverSlope()*self.s_center
-        diff = np.amax(flat_thalweg) - flat_thalweg[0]
-        z_start = thalweg_max + diff
-        bank = z_start + self.getHbf() - self.x_v * self.x_slope
-        ave = np.average(bank - thalweg)
-        std = np.std(bank - thalweg)
+        flat_thalweg = thalweg + self.channelUndulation
+        thalweg_max = np.amax(flat_thalweg)
+        diff = thalweg_max - flat_thalweg
+        ave = (np.average(diff) + self.getHbf())*self.dx
+        std = np.std(diff*self.dx)
         return std/ave
 
 
@@ -274,6 +226,10 @@ class Channel(Pipe):
                 y, z = self.suXShape(midInd, wbf, self.tz, self.xshapePoints)
             z = z + midInd*self.x_slope
             y, z = self.addBankPoints(y, z, midInd)
+
+            y = y*self.dx
+            z = z*self.dx
+
             ax.plot(y, z, 'k-', marker='o', label='x = '+str(midInd))
             plt.xlabel('Y (related to center of channel)')
             plt.ylabel('Z')
@@ -305,6 +261,10 @@ class Channel(Pipe):
             si = self.getCenterline_sn()[indMin]
             z = z + si*self.getPipeSlope()
             y, z = self.addBankPoints(y, z, indMin)
+
+            y = y*self.dx
+            z = z*self.dx
+
             plt.plot(y, z, 'k-', marker='o', label='Min Curvature:\nx = '+str(indMin))
             plt.ylabel('Z')
             plt.legend()
@@ -422,6 +382,10 @@ class Channel(Pipe):
         avail_pts - nested list;
                     elem: [set(available y values), (y1, z1), ...]
         '''
+        size_mean = size_mean/self.dx
+        size_std = size_std/self.dx
+        height = height/self.dx
+
         x_min = np.amin(self.xshape_x)
         x_min = int(min(x_min, 0))
         x_max = int(np.amax(self.xshape_x) + 1)
@@ -450,6 +414,9 @@ class Channel(Pipe):
         height - height from the centerline point.
         thick - how thick is the dam.
         '''
+        height = height/self.dx
+        thick = thick/self.dx
+
         loc_ind = np.where(self.s_center > loc)[0]
         loc_ind = np.amin(loc_ind)
         s = self.getSlope()[loc_ind]
@@ -540,7 +507,7 @@ class Channel(Pipe):
         header = ["x", "y", 'z']
         out = [header]
         xyz = self.tolist()
-        xyz_out = [[round(xyz[0][i], 3), round(xyz[1][i], 3), round(xyz[2][i], 3)] for i in range(len(xyz[0]))]
+        xyz_out = [[round(xyz[0][i]*self.dx, 3), round(xyz[1][i]*self.dx, 3), round(xyz[2][i]*self.dx, 3)] for i in range(len(xyz[0]))]
         out += xyz_out
         with open(outfile+".csv", 'w') as cf:
             cw = csv.writer(cf)
@@ -565,12 +532,12 @@ class Channel(Pipe):
         if len(self.levels_n['left']) == 1:
             return s
         for i in range(1, len(self.levels_n['left'])):
-            s += 'Average Width Offset of '+'L'+str(i)+' Outer Bank is: '+str(round(np.average(self.levels_n['left'][i]), 3)) + '\n'
+            s += 'Average Width Offset of '+'L'+str(i)+' Outer Bank is: '+str(round(np.average(self.levels_n['left'][i])*self.dx, 3)) + '\n'
             
         if len(self.levels_n['right']) == 1:
             return s
         for i in range(1, len(self.levels_n['right'])):
-            s += 'Average Width Offset of '+'R'+str(i)+' Outer Bank is: '+str(abs(round(np.average(self.levels_n['right'][i]), 3))) + '\n'
+            s += 'Average Width Offset of '+'R'+str(i)+' Outer Bank is: '+str(abs(round(np.average(self.levels_n['right'][i])*self.dx, 3))) + '\n'
 
         return s
 
@@ -983,6 +950,8 @@ class Channel(Pipe):
         height is the maximum difference of the noise.
         '''
         # decide the x range and y range of the channel base
+        height = height/self.dx
+
         min_x = np.amin(self.xshape_x)
         min_y = np.amin(self.xshape_y)
         max_x = np.amax(self.xshape_x)

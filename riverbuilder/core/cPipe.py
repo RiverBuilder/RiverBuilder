@@ -13,13 +13,13 @@ import csv
 
 class Pipe:
 
-    def __init__(self, x_len=100, x_slope=0.01, dx=1):
+    def __init__(self, x_len=100, x_slope=0.01, dx=1, zd=1000):
         '''Pipe class initiator
 
         x_len -- int; length in x direction
         x_slope -- float; slope in x direction
-        dx -- int; resolution in x direction, it should be positive integer
-
+        dx -- int; resolution in x direction, default is 1.
+                if dx=0.1, it means the size of grid in innerPipe is 0.1.
         class private variables:
         x_v -- array; x values of centerline
         x_index -- array; index of x_v
@@ -45,8 +45,9 @@ class Pipe:
                             key - x value; value - y values set
         '''
         self.x_len = x_len
-        self.dx = 1
+        self.dx = dx
         self.x_slope = x_slope
+        self.zd = zd/self.dx
         self.x_v = None
         self.x_index = np.array(list(range(ceil(x_len/dx))))
         self.y_center = None
@@ -60,6 +61,7 @@ class Pipe:
                           'z':self.levels_z,
                           'n':self.levels_n
                           }
+        self.thalweg = None
         self.s_center = None
         self.slope_center = None
         self.innerPipePoints = {}
@@ -165,6 +167,42 @@ class Pipe:
         return self.s_center
 
 
+    def setThalweg(self, fun=None, zd=0):
+        '''Calculate z values for thalweg
+
+        zd -- Datum
+        fun -- function used to calculate thalweg
+
+        Value will be modified:
+        self.thalweg
+        '''
+        s_v = self.getCenterline_sn()
+
+        if fun == None:
+            x = s_v
+            y = np.zeros(len(x))
+        else:
+            x, y = fun(s_v)
+            y = y / self.dx
+        dynamicSlope = self.getDynamicPipeSlope()
+        delta_s_v = np.concatenate((np.array([0]), s_v[1:] - s_v[0:-1]))
+        delta_z = np.multiply(dynamicSlope, delta_s_v)
+        z_v = np.empty_like(delta_z)
+        z_v[0] = 0
+        for i in range(1, len(z_v)):
+            z_v[i] = z_v[i-1] + delta_z[i]
+
+        self.channelUndulation = z_v
+        self.thalweg = y - z_v + self.zd + zd
+
+
+    def getThalweg(self):
+        '''Return self.thalweg'''
+        if self.thalweg is None:
+            self.setThalweg()
+        return self.thalweg
+
+
     def get_s_len(self):
         '''Return the length of centerline'''
         s_center = self.getCenterline_sn()
@@ -196,6 +234,16 @@ class Pipe:
         return self.s_center[-1] / self.x_v[-1]
 
 
+    def getHeight(self, direction):
+        '''Return z value of most outer bank of river
+
+        direction -- "left" or "right"
+        '''
+        if self.levels_z[direction] == []:
+            return None
+        return np.amax(self.levels_z[direction][-1])
+
+
     def setLevel(self, z_offset, z_start, y_offset, direction, yfun=None, innerPipe=False):
         '''Add one more level of level in a certain direction
 
@@ -206,24 +254,19 @@ class Pipe:
         yfun -- function to calculate y values of level
         innerPipe -- boolean; if this is an inner pipes calculation
         '''
+        z_offset = z_offset/self.dx
+#        y_offset = y_offset/self.dx
+        
         x_v = self.getCenterline_x()
         y_v = self.getCenterline_y()
 
-        if self.levels_n[direction] != []:
-#            print('level n', self.levels_n[direction])
-#            print('level x', len(self.levels_x[direction]))
-#            print('level y', len(self.levels_y[direction]))
-            start = self.levels_n[direction][-1]
-            prevLevel_x = self.levels_x[direction][-1]
-            prevLevel_y = self.levels_y[direction][-1]
-        else:
-            start = np.array([0]*len(x_v))
-            prevLevel_x = self.x_v
-            prevLevel_y = self.getCenterline_y()
+        start = np.array([0]*len(x_v))
+        prevLevel_x = x_v
+        prevLevel_y = y_v
 
         level_x, level_y, level_n = self.addLevelOffset(x_v, y_v, start, y_offset, direction, self.getCenterline_sn(), yfun)
         innerPipePoints = {}
-        level_x, level_y, ends_origin, innerPipePoints = self.levelCleanUp(level_x, level_y, x_v, y_v, direction, start, level_n, innerPipe)
+        level_x, level_y, ends_origin, innerPipePoints = self.levelCleanUp(level_x, level_y, x_v, y_v, direction, level_n, innerPipe)
         level_z = self.addTopOffset(level_x, level_y, prevLevel_x, prevLevel_y, z_start, z_offset)
 
         self.levels_n[direction].append(level_n)
@@ -268,6 +311,7 @@ class Pipe:
         fun -- function used to calculate centerline
         '''
         x_center, y_center = fun(self.x_index)
+        y_center = y_center/self.dx
         return x_center, y_center
 
 
@@ -304,12 +348,12 @@ class Pipe:
         level_y -- array; y values of the new level.
         level_n -- array; n values of the new level.
         '''
-        level_n = functions.offset_v(funInput, start, minimum, direction, fun)
+        level_n = functions.offset_v(funInput, start, minimum, direction, fun)/self.dx
         level_x, level_y = functions.sn_to_xy_v(x_v, y_v, level_n)
         return level_x, level_y, level_n
 
 
-    def levelCleanUp(self, level_x, level_y, start_x, start_y, direction, previous_n, level_n, innerPipe):
+    def levelCleanUp(self, level_x, level_y, previous_x, previous_y, direction, level_n, innerPipe):
         '''Clean up points of level cross over each other after it is transformed from sn to xy.
 
         level_x -- array; x values
@@ -322,12 +366,6 @@ class Pipe:
         '''
         # Doesn't need to clean if no curvatue
         points_end = [(int(round(level_x[i])), int(round(level_y[i]))) for i in range(len(level_x))]
-        slope_min = np.amin(self.getSlope())
-        slope_max = np.amax(self.getSlope())
-#        if slope_min == slope_max:
-#            return level_x, level_y, points_end, {}
-
-        previous_x, previous_y = start_x, start_y
 
         x_max_current = np.amax(level_x)
         x_max_previous = np.amax(previous_x)

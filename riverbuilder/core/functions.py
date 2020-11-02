@@ -691,7 +691,7 @@ def deleteCycles(line):
     clean_line = [line_copy[i] for i in range(len(line_copy)) if line_marker[i]]
 
     return clean_line
-        
+
 
 def completeLine(ln):
     '''
@@ -712,7 +712,7 @@ def completeLine(ln):
         diff_y = abs(lst_pt_xy[1] - crt_pt_xy[1])
 
         if diff_x >= 2 or diff_y >= 2:
-            steps = max(diff_x, diff_y)
+            steps = int(max(diff_x, diff_y))
             for t in range(1, steps+1):
                 alpha = t/steps
                 x = round(lst_pt[0]*(1-alpha) + crt_pt[0]*alpha)

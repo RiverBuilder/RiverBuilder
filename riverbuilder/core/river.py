@@ -44,6 +44,41 @@ def defaultFunction(x):
     return x, np.array([0]*len(x))
 
 
+def readTXTFunctionFile(nameId, paraDict, paraName, textName):
+    try:
+        f = open(textName, "r")
+    except IOError:
+        log = "Error! "+textName+" is not found in current folder:\n"+os.getcwd()+"\nProgram exits.\n"
+        print(log)
+        sys.exit()
+
+    lines = f.readlines()
+    funID = 0
+    funList = []
+    for line in lines:
+        if line.startswith('#') or '=' not in line:
+            continue
+        [name, val] = line.strip().split('=')
+
+        if name in paraDict:
+            name = re.split('\d+', name)[0]
+            name = name + '0' + str(nameId) + str(funID)
+            funID += 1
+
+        paraDict[name] = val
+        if not name.startswith('MASK'):
+            funList.append(name)
+
+    funList = '+'.join(funList)
+
+    if paraName in paraDict:
+        paraDict[paraName] = paraDict[paraName] + '+' + funList
+    else:
+        paraDict[paraName] = funList
+
+    return paraDict
+
+
 def fileParser(fname):
     '''Parse a file, return a dictionary
 
@@ -66,6 +101,7 @@ def fileParser(fname):
     lines = f.readlines()
     addonSet = ADDON.keys()
     p = re.compile('[A-Z]+')
+    nameID = 0
     for line in lines:
         if line.startswith('#') or '=' not in line:
             continue
@@ -76,6 +112,11 @@ def fileParser(fname):
             ADDON[m.group()].append(val)
             continue
 
+        if val.endswith('txt'):
+            outdict = readTXTFunctionFile(nameID, outdict, name, val)
+            nameID += 1
+            continue
+
         if name not in outdict:
             outdict[name] = val
         else:
@@ -84,6 +125,46 @@ def fileParser(fname):
     return outdict
 
 
+#def fileParser(fname):
+#    '''Parse a file, return a dictionary
+#
+#    fname -- str: path to file
+#
+#    Return:
+#    outdict -- dictionary, both key and value are string
+#
+#    Exception:
+#    IOError -- program will exit.
+#    '''
+#    outdict = {}
+#    try:
+#        f = open(fname, "r")
+#    except IOError:
+#        log = "Error! "+fname+" is not found in current folder:\n"+os.getcwd()+"\nProgram exits.\n"
+#        print(log)
+#        sys.exit()
+#
+#    lines = f.readlines()
+#    addonSet = ADDON.keys()
+#    p = re.compile('[A-Z]+')
+#    for line in lines:
+#        if line.startswith('#') or '=' not in line:
+#            continue
+#        [name, val] = line.strip().split('=')
+#        # check if it is an add-on:
+#        m = p.match(name)
+#        if m.group() is not None and m.group() in addonSet:
+#            ADDON[m.group()].append(val)
+#            continue
+#
+#        if name not in outdict:
+#            outdict[name] = val
+#        else:
+#            outdict[name] = outdict[name]+"+"+val
+#
+#    return outdict
+#
+#
 def paraCheck(fdict, name, defaultVal, valType, sign=0):
     '''Check if the value for a key in a dictionary is valid, return updated dictionary
 
@@ -449,9 +530,14 @@ def addLevels(pattern, fdict, funDict, default_fun,direction, obj):
         log += info
         z_offset = fdict[hightName]
 
-        z_pre = obj.getLevel('z', direction, -1)
-        x_pre = obj.getLevel('x', direction, -1)
-        x_start = x_pre[0]
+        thalweg = obj.getThalweg()
+        if hasattr(obj, 'channel'):
+            z_pre = thalweg
+        else:
+            orig_thalweg = thalweg+obj.channelUndulation
+            thalweg_max = np.amax(orig_thalweg)
+            z_pre = thalweg_max - obj.channelUndulation
+
         obj.setLevel(z_offset, z_pre, y_offset, direction, fun)
         if funName in fdict:
             log += "Creating "+name[:-22]+"with function: "+str(fdict[funName])+'\n'
@@ -530,7 +616,7 @@ def buildChannel(fdict, funDict):
     '''
     log = ''
     c = Channel(fdict["Length"], fdict["Inner Channel Lateral Offset Minimum"],\
-            fdict["Valley Slope (Sv)"], fdict["X Resolution"])
+            fdict["Valley Slope (Sv)"], fdict["X Resolution"], fdict["Datum"])
 
     nPoints = fdict['Channel XS Points']
     c.setXShapePoints(nPoints)
@@ -628,7 +714,7 @@ def buildChannel(fdict, funDict):
 
         def loopFun(channel, para):
             channel.wbf_min = para
-            channel.createInnerChannel(leftfun, rightfun, fdict["Datum"], thalfun)
+            channel.createInnerChannel(leftfun, rightfun, thalfun)
             return channel
 
         def calFun(channel):
@@ -647,7 +733,7 @@ def buildChannel(fdict, funDict):
 
         def loopFun(channel, para):
             channel.hbf = para
-            channel.createInnerChannel(leftfun, rightfun, fdict["Datum"], thalfun)
+            channel.createInnerChannel(leftfun, rightfun, thalfun)
             return channel
 
         def calFun(channel):
@@ -661,7 +747,7 @@ def buildChannel(fdict, funDict):
             log += info
             c.hbf = para
 
-    c.createInnerChannel(leftfun, rightfun, fdict["Datum"], thalfun)
+    c.createInnerChannel(leftfun, rightfun,  thalfun)
     log += "Creating Inner Channel Banks with left bank function: "+fdict.get("Left Inner Bank Function", "None")+'\n'
     log += "                             with right bank function: "+fdict.get("Right Inner Bank Function", "None")+'\n'
     log += "                             with thalweg elevation function: "+fdict.get("Thalweg Elevation Function", "None")+'\n'
@@ -702,6 +788,7 @@ def buildChannel(fdict, funDict):
 
     #################### Bed Roughness ################################
     if 'PBR' in fdict:
+        log += 'Adding perlin roughness to bed.\n'
         fdict, info = paraCheck(fdict, "PBR", 5, "float")
         c.perlinThalweg(fdict['PBR'])
 
@@ -780,8 +867,7 @@ def buildValley(fdict, funDict, channel):
     log -- string log
     '''
     log = ''
-    valley = Valley(fdict["Length"], channel, \
-                fdict["Valley Slope (Sv)"], fdict["X Resolution"])
+    valley = Valley(channel)
 
     fun, info = buildFun("Valley Centerline Function", fdict, funDict, defaultFunction)
     log += info
@@ -812,7 +898,7 @@ def buildValley(fdict, funDict, channel):
     return valley, log
 
 
-def plotLevels(ax, xdict, ydict, labelend, col):
+def plotLevels(ax, xdict, ydict, dx, labelend, col):
     '''Plot levels to a figure.
 
     ax - the ax to draw to 
@@ -822,16 +908,16 @@ def plotLevels(ax, xdict, ydict, labelend, col):
     col - col of dots
     '''
     for i in range(len(xdict['left'])):
-        x = xdict['left'][i]
-        y = ydict['left'][i]
+        x = xdict['left'][i]*dx
+        y = ydict['left'][i]*dx
         if labelend == 'V':
             ax.scatter(x, y, c='C'+str(col+i), marker='.', label='L'+labelend+str(i+1))
         else:
             ax.scatter(x, y, c='C'+str(col+i), marker='.', label='L'+labelend+str(i))
 
     for i in range(len(xdict['right'])):
-        x = xdict['right'][i]
-        y = ydict['right'][i]
+        x = xdict['right'][i]*dx
+        y = ydict['right'][i]*dx
         if labelend == 'V':
             ax.scatter(x, y, c='C'+str(col+i), marker='_', label='R'+labelend+str(i+1))
         else:
@@ -884,9 +970,9 @@ def buildRiver(fname, outfolder, log):
         valleyCol = max(len(channel.levels_x['left']), len(channel.levels_x['right'])) +1
 
         fig, ax = plt.subplots(1, 1, figsize=[19.2, 14.4], dpi=400)
-        ax.plot(channel.x_v, channel.y_center, 'k-', label='CL')
-        plotLevels(ax, channel.levels_x, channel.levels_y, 'B', 1)
-        plotLevels(ax, valley.levels_x, valley.levels_y, 'V', valleyCol)
+        ax.plot(channel.x_v*channel.dx, channel.y_center*channel.dx, 'k-', label='CL')
+        plotLevels(ax, channel.levels_x, channel.levels_y, channel.dx, 'B', 1)
+        plotLevels(ax, valley.levels_x, valley.levels_y, channel.dx, 'V', valleyCol)
         plt.title('SRV Planform')
         plt.xlabel('X (Distance Downstream)')
         plt.ylabel('Y')
@@ -894,9 +980,9 @@ def buildRiver(fname, outfolder, log):
         plt.savefig(outfolder+'/SRVlevels_xy')
 
         fig, ax = plt.subplots(1, 1, figsize=[19.2, 14.4], dpi=400)
-        ax.plot(channel.x_v, channel.thalweg, 'k-', label='Thalweg')
-        plotLevels(ax, channel.levels_x, channel.levels_z, 'B', 1)
-        plotLevels(ax, valley.levels_x, valley.levels_z, 'V', valleyCol)
+        ax.plot(channel.x_v*channel.dx, channel.thalweg*channel.dx, 'k-', label='Thalweg')
+        plotLevels(ax, channel.levels_x, channel.levels_z, channel.dx, 'B', 1)
+        plotLevels(ax, valley.levels_x, valley.levels_z, channel.dx, 'V', valleyCol)
         plt.title('SRV Longitudianl Profile')
         plt.xlabel('X (Distance Downstream)')
         plt.ylabel('Z')
@@ -907,12 +993,12 @@ def buildRiver(fname, outfolder, log):
         fig.suptitle('River Centerline Slope & Curvature')
         fig.subplots_adjust(hspace=0)
         plt.subplot(211)
-        plt.plot(channel.x_v, channel.getSlope(), 'tab:blue', label='slope')
+        plt.plot(channel.x_v*channel.dx, channel.getSlope(), 'tab:blue', label='slope')
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.legend()
         plt.subplot(212)
-        plt.scatter(channel.x_v, channel.getDynamicCurv(), c='tab:blue', s=1, label='dynamic curvature')
+        plt.scatter(channel.x_v*channel.dx, channel.getDynamicCurv(), c='tab:blue', s=1, label='dynamic curvature')
         plt.ylabel('Y')
         plt.legend()
         plt.savefig(outfolder+'/SRVcurvature')
@@ -941,7 +1027,7 @@ def buildRiver(fname, outfolder, log):
         out = [['X', 'S', 'C']]
         riverSlope = channel.getSlope()
         riverCurvature = channel.getDynamicCurv()
-        riverx = channel.x_v
+        riverx = channel.x_v*channel.dx
         out += [[riverx[i], riverSlope[i], riverCurvature[i]] for i in range(len(riverx))]
         with open(os.getcwd()+'/'+outfolder+'/SRVcenterline.csv', 'w') as cf:
             wt = csv.writer(cf, lineterminator='\n')
@@ -949,14 +1035,14 @@ def buildRiver(fname, outfolder, log):
 
         out = [['X', 'Z']]
         xz = valley.tolist_levelxz()
-        out += [[xz[0][i], xz[1][i]] for i in range(len(xz[0]))]
+        out += [[xz[0][i]*valley.dx, xz[1][i]*valley.dx] for i in range(len(xz[0]))]
         with open(os.getcwd()+'/'+outfolder+'/SRVlevels_xz.csv', 'w') as cf:
             wt = csv.writer(cf, lineterminator='\n')
             wt.writerows(out)
 
         out = [['X', 'Y']]
         xz = valley.tolist_levelxy()
-        out += [[xz[0][i], xz[1][i]] for i in range(len(xz[0]))]
+        out += [[xz[0][i]*valley.dx, xz[1][i]*valley.dx] for i in range(len(xz[0]))]
         with open(os.getcwd()+'/'+outfolder+'/SRVlevels_xy.csv', 'w') as cf:
             wt = csv.writer(cf, lineterminator='\n')
             wt.writerows(out)
