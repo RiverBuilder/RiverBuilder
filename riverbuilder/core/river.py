@@ -882,19 +882,11 @@ def buildValley(fdict, funDict, channel):
 
     lboffset = fdict['Left Valley Boundary Lateral Offset Minimum']
     lbheight = fdict['Left Valley Boundary Height Offset']
-    if valley.levels_z['left'] == []:
-        z_start = channel.levels_z['left'][-1]
-    else:
-        z_start = valley.levels_z['left'][-1]
-    valley.setValleyBoundary(lbheight, z_start, lboffset, 'left', None)
+    valley.setValleyBoundary(lbheight, lboffset, 'left', None)
 
     rboffset = fdict['Right Valley Boundary Lateral Offset Minimum']
     rbheight = fdict['Right Valley Boundary Height Offset']
-    if valley.levels_z['right'] == []:
-        z_start = channel.levels_z['right'][-1]
-    else:
-        z_start = valley.levels_z['right'][-1]
-    valley.setValleyBoundary(rbheight, z_start, rboffset, 'right', None)
+    valley.setValleyBoundary(rbheight, rboffset, 'right', None)
     return valley, log
 
 
