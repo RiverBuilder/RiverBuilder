@@ -35,11 +35,11 @@ class Valley(Pipe):
         super().__init__(int(channel.x_len), channel.x_slope, channel.dx, channel.zd)
         self.channelCenter_x = channel.x_v
         self.channelCenter_y = channel.getCenterline_y()
-        self.setThalweg(zd=(-1*channel.zd))
+        self.setThalweg()
 
 
-    def setValleyBoundary(self, z_offset, z_start, y_offset, direction, yfun=None):
-        z_start = np.zeros(len(self.x_v))
+    def setValleyBoundary(self, z_offset, y_offset, direction, yfun=None):
+        z_start = self.getThalweg() - self.zd
         z_max = np.amax(self.channel.levels_z[direction][-1])*self.dx
         z_offset += z_max
 
