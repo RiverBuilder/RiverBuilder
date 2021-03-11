@@ -1,1 +1,0 @@
-# Please define length of river hereLength=2000# Please define functions hereMASK0=(ALL)MASK1=(0, off, 500, on)SIN1=(175, 0.5, 0, MASK0)SIN2=(50, 2, 0, MASK0)COS1=(75, 4, pi, MASK0)COS2=(25, 10, 0, MASK0)SIN3=(50, 2, 0, MASK1)# Meandering Centerline (Mc) PropertiesCenterline Function=SIN1Centerline Function=SIN2Centerline Function=COS1Centerline Function=COS2
