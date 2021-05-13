@@ -14,14 +14,14 @@ import pandas as pd
 case_name = 'S1_noSlope'         # Case Name
 dir = "./samples/S1"            # Folder Name
 
-RB_unit = 'meter'                # Unit of the river archetype
-asc_unit = 'meter'              # Unit of the ascii terrain
+RB_unit = 'meter'                # Unit of the river archetype, 'meter' or 'foot'
+asc_unit = 'meter'              # Unit of the ascii terrain, 'meter' or 'foot'
 cell_size = '1'                 # Cell size of ascii terrain in asc_unit
 
-execute = np.array([1,          # 1 if you want to execute "Table to point",
-                    1,          # 1 if you want to execute "Create TIN",
-                    1,          # 1 if you want to execute "TIN to Raster",
-                    1])         # 1 if you want to execute "Raster to asc"
+execute = np.array([1,          # 1 if you want to execute "Table to point", 0 otherwise
+                    1,          # 1 if you want to execute "Create TIN", 0 otherwise
+                    1,          # 1 if you want to execute "TIN to Raster", 0 otherwise
+                    1])         # 1 if you want to execute "Raster to asc" 0 otherwise
 
 #############################################################################################
 # Workspace setting
