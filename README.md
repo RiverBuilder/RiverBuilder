@@ -18,7 +18,7 @@ The main command to run the script is `python3 -m riverbuilder <inputfile.txt> <
 
 * `<your message>` is a message will be added to the output. It is also optional. If `<outputFolder>` is not set, this can't be set.
 
-More explanations can be found in [manual](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.0.0_FINAL.pdf).
+More explanations can be found in [manual](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.2.0_final.pdf).
 
 ### In MacOS or Linux
 
