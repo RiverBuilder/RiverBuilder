@@ -81,6 +81,7 @@ def ifft_out(signal, fft, ifft_df, n, spacing):
 
     fft_freqs = np.fft.fftfreq(fft.size, spacing)
     ifft = np.fft.ifft(fft).real
+    ifft = [0]*len(np.fft.ifft(fft).real)
     reach_length = signal.size * spacing
     for index, i in enumerate(fft):
         if i != 0.0:
@@ -116,6 +117,7 @@ def ifft_out(signal, fft, ifft_df, n, spacing):
                 phase = sub_index * spacing
 
             phase_list.append(phase)
+            ifft = ifft + temp_ifft
 
     return [sin_coefs, cos_coefs, freq_list, amp_list, phase_list, ifft_df, ifft]
 
@@ -126,7 +128,7 @@ def by_fft(signal, n, spacing):
     if n == 0:
         ifft = np.fft.ifft(fft).real
 
-    np.put(fft, range(n, len(fft)), 0.0)
+    np.put(fft, range(n+1, len(fft)-n+1), 0.0)
     fft_freqs = np.fft.fftfreq(signal.size, spacing)
 
     out_list = ifft_out(signal, fft, ifft_df, n, spacing)
@@ -139,7 +141,7 @@ def by_fft(signal, n, spacing):
 
     return [ifft, n, out_list[1], out_list[2], ifft_df, freqs, amps, phases]
 
-
+"""
 def by_power(signal, n, spacing):
     ifft_df = pd.DataFrame()
     ifft_df['raw_series'] = signal
@@ -147,11 +149,10 @@ def by_power(signal, n, spacing):
     if n == 0:
         ifft = np.fft.ifft(fft).real
 
-    psd = np.abs(fft) ** 2
-    indices = np.argsort(psd).tolist()
-    n_indices = indices[:-n]
+    n_indices = range(n+1,  len(fft)-n+1)
     np.put(fft, n_indices, 0.0)
     fft_freqs = np.fft.fftfreq(signal.size, spacing)
+    print(n)
 
     out_list = ifft_out(signal, fft, ifft_df, n, spacing)
     freqs = out_list[2]
@@ -203,7 +204,7 @@ def by_power_binned(signal, n, spacing):
     ifft_df['all_%s_harmonics' % n] = ifft
 
     return [ifft, n, out_list[1], out_list[2], ifft_df, freqs, amps, phases]
-
+"""
 
 def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_names=[], r_2=0.95, n=0, methods='ALL'):
     """This function plots a N number of Fourier coefficients reconstrution of input signals. Exports coefficients to csv or text file.
@@ -223,7 +224,8 @@ def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_name
     out_folder = os.path.dirname(in_csv)
     print('CSV imported...')
 
-    fields = [i for i in in_df.columns.values.tolist() if i != index_field]
+    fields = [i for i in in_df.columns.values.tolist() if i != index_field and i[:7] != 'Unnamed']
+    print(fields)
 
     try:
         in_df.sort_values(index_field, inplace=True)
@@ -235,7 +237,8 @@ def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_name
 
 
     if methods == 'ALL':
-        methods_dict = {'by_fft': [], 'by_power': [], 'by_power_binned': []}  # Each list associated with each method stores [ifft, n, sin_coefs, cos_coefs, ifft_df]
+        #methods_dict = {'by_fft': [], 'by_power': [], 'by_power_binned': []}  # Each list associated with each method stores [ifft, n, sin_coefs, cos_coefs, ifft_df]
+        methods_dict = {'by_fft': []}
     else:
         methods_dict = {methods: []}
 
@@ -266,7 +269,7 @@ def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_name
                                 for out in out_list:
                                     in_list.append(out)
                                 break
-
+                """
                 if method == 'by_power':
                     for i in range(1, len(field_signal)):
                         out_list = by_power(field_signal, i, spacing)
@@ -284,7 +287,7 @@ def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_name
                             for out in out_list:
                                 in_list.append(out)
                             break
-
+                """
                 methods_dict[method].append(in_list)
 
         else:
@@ -295,7 +298,7 @@ def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_name
                     temp_r2 = np.corrcoef(field_signal, out_list[0])[0][1] ** 2
                     for out in out_list:
                         in_list.append(out)
-
+                """
                 if method == 'by_power':
                     out_list = by_power(field_signal, n, spacing)
                     temp_r2 = np.corrcoef(field_signal, out_list[0])[0][1] ** 2
@@ -307,21 +310,32 @@ def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_name
                     temp_r2 = np.corrcoef(field_signal, out_list[0])[0][1] ** 2
                     for out in out_list:
                         in_list.append(out)
-
+                """
                 methods_dict[method].append(in_list)
 
+    tmp = 0
+    lat_offset = []
     for method in methods_dict.keys():
         print('Completing %s analysis...' % method)
         method_list = methods_dict[method]  # Stores data for each field within one calculation method
         for count, field in enumerate(fields):
-#            text_file = open(out_folder + '\\%s_%s_to_riverbuilder.txt' % (field, method), 'w+')
+            plt.ioff()
+
+            #text_file = open(out_folder + '\\%s_%s_to_riverbuilder.txt' % (field, method), 'w+')
+            #text_file = open(out_folder + '\\%s.txt' % (field), 'w+')
+            text_offset = open(out_folder + '\\%s_offset.txt' % (field), 'w+')
             field_name = field_names[count]
 
             list = method_list[count]
             ifft_df = list[4]
             ifft_df.to_csv(out_folder + '\\%s_harmonics_%s.csv' % (field, method))
 
+            avg_signal = np.mean(in_df.loc[:, str(field)].squeeze())
+            min_signal = np.min(list[0])+avg_signal
+
             plt.plot(index_array, in_df.loc[:, str(field)].squeeze(), color='blue', label='Signal')
+            plt.plot(index_array, in_df.loc[:, str(field)].squeeze()-avg_signal,
+                     color='black', label='Zero-averaged Signal')
             plt.plot(index_array, list[0], color='red', linestyle='--', label='Reconstructed signal')
 
             if units != '':
@@ -342,13 +356,21 @@ def river_builder_harmonics(in_csv, index_field, units='', fields=[], field_name
             plt.savefig(fig_title, dpi=300, bbox_inches='tight')
             plt.cla()
 
-#            for num, amp in enumerate(list[-2]):
-#                if amp != 0.0:
-#                    text_file.write('COS%s=(%s, %s, %s, MASK0)\n' % (num, amp, list[-3][num], list[-1][num]))  # Writes in the form of COS#=(a, f, ps, MASK0) for river builder inputs
-#            text_file.close()
+            #for num, amp in enumerate(list[-2]):
+            #    if amp != 0.0:
+            #        text_file.write('COS%s=(%s, %s, %s, MASK0)\n' % (num, amp, list[-3][num], list[-1][num]))  # Writes in the form of COS#=(a, f, ps, MASK0) for river builder inputs
+            #text_file.close()
 
+            text_offset.write('LINE%s=(0, %5.3f, MASK0)\n' % (tmp, avg_signal))
+            text_offset.write('Lateral Offset Minimum (half)=%5.3f\n' % min_signal)
+            text_offset.write('Lateral Offset Minimum (full)=%5.3f\n' % (min_signal*2))
+
+            text_offset.close()
+            tmp += 1
+
+            lat_offset.append(min_signal*2)
     print('Analysis complete. Results @ %s' % out_folder)
-
+    return lat_offset
 
 if __name__ == '__main__':
 
@@ -410,14 +432,4 @@ if __name__ == '__main__':
     root.grid_rowconfigure(4, minsize=80)
 
     root.mainloop()
-
-
-
-
-
-                
-
-
-
-
 
