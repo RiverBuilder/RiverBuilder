@@ -11,8 +11,8 @@ import pandas as pd
 
 #############################################################################################
 # Input variables: RB_path, asc_name, RB_unit, asc_unit, cell_size, execute
-case_name = 'S1_noSlope'         # Case Name
-dir = "./samples/S1"            # Folder Name
+case_name = 'vanilla'         # Case Name
+dir = "./samples/rosgenC4"            # Folder Name
 
 RB_unit = 'meter'                # Unit of the river archetype, 'meter' or 'foot'
 asc_unit = 'meter'              # Unit of the ascii terrain, 'meter' or 'foot'

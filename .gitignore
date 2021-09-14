@@ -3,3 +3,6 @@
 rplot.R~
 *~
 *.swp
+rb_run.py
+.idea/RiverBuilder.iml
+.idea/misc.xml
