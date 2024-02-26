@@ -311,7 +311,7 @@ class Channel(Pipe):
             y_temp = y_temp + centerOffset
             real_x, real_y = functions.sn_to_xy(x1, y1, x2, y2, y_temp)
             # the following line may need to be commented out
-            z = z - pipe_slope*s                                            # use s instead of x
+            #z = z - pipe_slope*s                                            # use s instead of x
 ###############################################
 #            if asFlag:
             for i in range(len(xshape_lines)):
