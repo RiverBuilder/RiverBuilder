@@ -71,9 +71,44 @@ class Valley(Pipe):
         self.helpAppend(y, self.channel.levels_y)
         self.helpAppend(x, self.levels_x)
         self.helpAppend(y, self.levels_y)
-
         return [x, y]
 
+    def tolabeledlist_levelxy(self):
+        '''Return x, y values for all levels in a secondary list.'''
+        x = []
+        y = []
+        label = []
+
+        # Add left valley
+        for i in range(len(self.levels_x['left'])):
+            x += self.levels_x['left'][i].tolist()
+            y += self.levels_y['left'][i].tolist()
+            label += ['LV'+str(i)]*len(self.levels_x['left'][i])
+
+        # Add left channel bank
+        for i in range(len(self.channel.levels_x['left'])):
+            x += self.channel.levels_x['left'][i].tolist()
+            y += self.channel.levels_y['left'][i].tolist()
+            label += ['LB'+str(i)]*len(self.channel.levels_x['left'][i])
+
+        # Add channel center line
+        x += self.channelCenter_x.tolist()
+        y += self.channelCenter_y.tolist()
+        label += ['CL'] * len(self.channelCenter_x.tolist())
+
+        # Add right channel bank
+        for i in range(len(self.channel.levels_x['right'])):
+            x += self.channel.levels_x['right'][i].tolist()
+            y += self.channel.levels_y['right'][i].tolist()
+            label += ['RB'+str(i)]*len(self.channel.levels_x['right'][i])
+
+        # Add right valley
+        for i in range(len(self.levels_x['right'])):
+            x += self.levels_x['right'][i].tolist()
+            y += self.levels_y['right'][i].tolist()
+            label += ['RV'+str(i)]*len(self.levels_x['right'][i])
+
+        return [x, y, label]
 
     def tolist_levelxz(self):
         '''Return x, y values for all levels in a secondary list.'''

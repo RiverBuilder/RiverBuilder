@@ -960,7 +960,6 @@ def buildRiver(fname, outfolder, log):
             os.mkdir(outfolder)
 
         valleyCol = max(len(channel.levels_x['left']), len(channel.levels_x['right'])) +1
-
         fig, ax = plt.subplots(1, 1, figsize=[19.2, 14.4], dpi=400)
         ax.plot(channel.x_v*channel.dx, channel.y_center*channel.dx, 'k-', label='CL')
         plotLevels(ax, channel.levels_x, channel.levels_y, channel.dx, 'B', 1)
@@ -969,6 +968,9 @@ def buildRiver(fname, outfolder, log):
         plt.xlabel('X (Distance Downstream)')
         plt.ylabel('Y')
         plt.legend()
+        #for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+        #             ax.get_xticklabels() + ax.get_yticklabels()):
+        #    item.set_fontsize(40)
         plt.savefig(outfolder+'/SRVlevels_xy')
 
         fig, ax = plt.subplots(1, 1, figsize=[19.2, 14.4], dpi=400)
@@ -979,6 +981,9 @@ def buildRiver(fname, outfolder, log):
         plt.xlabel('X (Distance Downstream)')
         plt.ylabel('Z')
         plt.legend()
+        #for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+        #             ax.get_xticklabels() + ax.get_yticklabels()):
+        #    item.set_fontsize(40)
         plt.savefig(outfolder+'/SRVlevels_xz')
 
         fig, ax = plt.subplots(2, 1, sharex=True)
@@ -1036,6 +1041,13 @@ def buildRiver(fname, outfolder, log):
         xz = valley.tolist_levelxy()
         out += [[xz[0][i]*valley.dx, xz[1][i]*valley.dx] for i in range(len(xz[0]))]
         with open(os.getcwd()+'/'+outfolder+'/SRVlevels_xy.csv', 'w') as cf:
+            wt = csv.writer(cf, lineterminator='\n')
+            wt.writerows(out)
+
+        out = [['X', 'Y', 'ID']]
+        xyl = valley.tolabeledlist_levelxy()
+        out += [[xyl[0][i]*valley.dx, xyl[1][i]*valley.dx, xyl[2][i]] for i in range(len(xyl[0]))]
+        with open(os.getcwd()+'/'+outfolder+'/SRVlevels_xy_labeled.csv', 'w') as cf:
             wt = csv.writer(cf, lineterminator='\n')
             wt.writerows(out)
 
