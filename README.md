@@ -114,7 +114,7 @@ Coefficient of Variation (H_ic):0.406
 
 ## Documentation
 
-The full manual is available [here](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.0.0_FINAL.pdf).
+The full manual is available [here](https://github.com/RiverBuilder/RiverBuilder/blob/master/RiverBuilder_User_Manual_1.2.0_FINAL_Rev1.pdf).
 
 ## License
 
