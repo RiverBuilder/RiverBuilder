@@ -694,38 +694,50 @@ def deleteCycles(line):
 
 
 def completeLine(ln):
-    '''
-    1. Round points in ln to int (only x and y values)
-    2. Remove duplicate points in ln (if both x and y matches)
-    '''
-    out_ln = [(round(ln[0][0]), round(ln[0][1]), ln[0][2])]
-    lst_pt = out_ln[0]
-    for i in range(1, len(ln)):
-        crt_pt = (round(ln[i][0]), round(ln[i][1]), ln[i][2])
-        lst_pt_xy = (lst_pt[0], lst_pt[1])
-        crt_pt_xy = (crt_pt[0], crt_pt[1])
-
-        if lst_pt_xy == crt_pt_xy:
+    """
+      1. Round x and y values to integers.
+      2. Remove duplicate points (if both x and y matches).
+      3. If the difference in x or y between consecutive points is >= 2, 
+         interpolate intermediate points.
+    """
+    # Finding any invalid points.
+    valid_points = []
+    for pt in ln:
+        if isinstance(pt, (list, tuple)) and len(pt) >= 3:
+            valid_points.append((round(pt[0]), round(pt[1]), pt[2]))
+    # If no valid points, return empty list.
+    if not valid_points:
+        return []
+    
+    out_ln = [valid_points[0]]
+    last_pt = valid_points[0]
+    
+    # Process remaining valid points.
+    for pt in valid_points[1:]:
+        # If x-y coordinates are identical, skip this point.
+        if (last_pt[0], last_pt[1]) == (pt[0], pt[1]):
             continue
         
-        diff_x = abs(lst_pt_xy[0] - crt_pt_xy[0])
-        diff_y = abs(lst_pt_xy[1] - crt_pt_xy[1])
-
+        diff_x = abs(last_pt[0] - pt[0])
+        diff_y = abs(last_pt[1] - pt[1])
+        
+        # If difference in either coordinate is large, interpolate intermediate points.
         if diff_x >= 2 or diff_y >= 2:
             steps = int(max(diff_x, diff_y))
-            for t in range(1, steps+1):
-                alpha = t/steps
-                x = round(lst_pt[0]*(1-alpha) + crt_pt[0]*alpha)
-                y = round(lst_pt[1]*(1-alpha) + crt_pt[1]*alpha)
-                z = lst_pt[2]*(1-alpha) + crt_pt[2]*alpha
-                out_ln.append((x, y, z))
+            for t in range(1, steps + 1):
+                alpha = t / steps
+                inter_x = round(last_pt[0] * (1 - alpha) + pt[0] * alpha)
+                inter_y = round(last_pt[1] * (1 - alpha) + pt[1] * alpha)
+                inter_z = last_pt[2] * (1 - alpha) + pt[2] * alpha
+                out_ln.append((inter_x, inter_y, inter_z))
+        # If differences are equal, add an extra intermediate point before the current point.
         elif diff_x == diff_y:
-            out_ln.append((lst_pt[0], crt_pt[1], crt_pt[2]))
-            out_ln.append(crt_pt)
+            out_ln.append((last_pt[0], pt[1], pt[2]))
+            out_ln.append(pt)
         else:
-            out_ln.append(crt_pt)
-
-        lst_pt = crt_pt
+            out_ln.append(pt)
+        
+        last_pt = pt
 
     return out_ln
 

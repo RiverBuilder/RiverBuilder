@@ -20,7 +20,7 @@ import sys
 
 class Channel(Pipe):
 
-    def __init__(self, x_len=100, wbf_min=0, valley_slope=0.01, dx=1, zd=1000):
+    def __init__(self, x_len=100, wbf_min=0, valley_slope=0.01, dx=1, zd=1000, cross_section_type ="default"):
         '''Channel class initiator
 
         x_len -- int; valley length in x direction
@@ -42,6 +42,7 @@ class Channel(Pipe):
         '''
         super().__init__(int(x_len), valley_slope, dx, zd)
         self.wbf_min = wbf_min/dx
+        self.cross_section_type = cross_section_type
         self.turns_center = []
         self.hbf = None
         self.curvature = None
@@ -208,8 +209,142 @@ class Channel(Pipe):
         return self.z_center
 
 
+#  ------to plot XShape---------
     def getXShapePlot(self):
-        '''return matplotlib plot object that contains X-Shape plots of the river Channel.'''
+        """
+        Return matplotlib plot object showing the X-Shape of the channel.
+        Includes SU, AU, CF, PY, AF, DT (Deep Thalweg), and TU (Triple U) cross-sections.
+        """
+
+        # Check if cross_section_type exists
+        if hasattr(self, 'cross_section_type'):
+            ctype = self.cross_section_type
+        else:
+            ctype = None  # existing logic
+
+        # Choose a middle station along the channel for plotting
+        midInd = len(self.x_v) // 2
+
+        # Compute total width at that station
+        wbf = abs(self.levels_n["left"][0][midInd]) + abs(self.levels_n["right"][0][midInd])
+
+        # 1) CF Cross-Section
+        if ctype == 'CF':
+            fig, ax = plt.subplots(1, 1)
+            fig.suptitle('CF X-Shape for Channel')
+
+            CF_a = getattr(self, 'CF_a', 1)
+            CF_b = getattr(self, 'CF_b', 0)
+            CF_c = getattr(self, 'CF_c', 0.25)
+
+            y, z = self.cfXShape(wbf,n=self.xshapePoints, CF_a=CF_a, CF_b=CF_b, CF_c=CF_c)
+            z = z + midInd * self.getPipeSlope()
+
+            # shape connects with banks
+            y, z = self.addBankPoints(y, z, midInd)
+
+            # Scale by dx
+            y = y * self.dx
+            z = z * self.dx
+
+            ax.plot(y, z, 'k-o', label=f'CF shape @ station {midInd}')
+            ax.set_xlabel('Y (local cross-section)')
+            ax.set_ylabel('Z')
+            ax.legend()
+            return fig
+
+
+        # 2) PY Cross-Section
+        if ctype == 'PY':
+            fig, ax = plt.subplots(1, 1)
+            fig.suptitle('PY X-Shape (Wavy U)')
+
+            # Generate PY shape
+            y, z = self.pyXShape(wbf)
+
+            # ensuring the shape connects with banks
+            y, z = self.addBankPoints(y, z, midInd)
+
+            # Scale by dx
+            y = y * self.dx
+            z = z * self.dx
+
+            ax.plot(y, z, 'k-o', label=f'PY shape @ station {midInd}')
+            ax.set_xlabel('Y')
+            ax.set_ylabel('Z')
+            ax.legend()
+            return fig
+
+        # 3) AF Cross-Section
+        if ctype == 'AF':
+            fig, ax = plt.subplots(1, 1)
+            fig.suptitle('AF X-Shape (Angled Flat)')
+            
+            d1 = getattr(self, 'af_d1', 5)
+            d2 = getattr(self, 'af_d2', 5)
+            ang1 = getattr(self, 'af_ang1', 55)
+            ang2 = getattr(self, 'af_ang2', 55)
+
+            # Using stored depth/angle parameters; if not, afXShape uses its defaults.
+            y, z = self.afXShape(wbf, n=self.xshapePoints, d1=d1, d2=d2, ang1=ang1, ang2=ang2)
+            
+            # For AF, since the profile is already fixed-up, we may not want to add extra bank points.
+            # TODO: Check this
+            # y, z = self.addBankPoints(y, z, midInd)
+
+            y = y * self.dx
+            z = z * self.dx
+
+            ax.plot(y, z, 'b-o', label=f'AF shape @ station {midInd}')
+            ax.set_xlabel('Y')
+            ax.set_ylabel('Z')
+            ax.legend()
+            return fig
+
+        # 4) DT (Deep Thalweg) Cross-Section
+        if ctype == 'DT':
+            fig, ax = plt.subplots(1, 1)
+            fig.suptitle('DT X-Shape (Deep Thalweg)')
+
+            y, z = self.dtXShape(wbf)
+            
+            y, z = self.addBankPoints(y, z, midInd)
+            
+            y = y * self.dx
+            z = z * self.dx
+
+            ax.plot(y, z, 'm-o', label=f'DT shape @ station {midInd}')
+            ax.set_xlabel('Y')
+            ax.set_ylabel('Z')
+            ax.legend()
+            return fig
+
+        # 5) TU (Triple U) Cross-Section
+        if ctype == 'TU':
+            fig, ax = plt.subplots(1, 1)
+            fig.suptitle('TU X-Shape (Triple U)')
+
+            # Generate TU shape using your tuXShape() function.
+            y, z = self.tuXShape(wbf)
+            
+
+            y = y[::-1] #FLIPPING
+            z = z[::-1]
+            
+            # Ensure the shape connects with banks
+            y, z = self.addBankPoints(y, z, midInd)
+            
+            # Scale by dx if needed
+            y = y * self.dx
+            z = z * self.dx
+
+            ax.plot(y, z, 'c-o', label=f'TU shape @ station {midInd}')
+            ax.set_xlabel('Y')
+            ax.set_ylabel('Z')
+            ax.legend()
+            return fig
+
+        # 6) Default back to AU/SU Cross-Sections
         cur_v = self.getDynamicCurv()
         maxCur = np.amax(cur_v)
         minCur = np.amin(cur_v)
@@ -230,42 +365,41 @@ class Channel(Pipe):
             y = y*self.dx
             z = z*self.dx
 
-            ax.plot(y, z, 'k-', marker='o', label='x = '+str(midInd))
-            plt.xlabel('Y (related to center of channel)')
-            plt.ylabel('Z')
-            plt.legend()
+            ax.plot(y, z, 'k-', marker='o', label='x = ' + str(midInd))
+            ax.set_xlabel('Y (related to center of channel)')
+            ax.set_ylabel('Z')
+            ax.legend()
             return fig
+
         else:
             abs_cur_v = np.absolute(cur_v)
             fig, ax = plt.subplots(2, 1, sharex=True)
             fig.suptitle('Max Curvature X-Shape vs. Zero Curvature X-Shape')
 
+            # Subplot #1: Max Curvature
             plt.subplot(212)
             indMax = np.argmax(abs_cur_v)
-            maxCur = cur_v[indMax]
             wbf = abs(self.levels_n["left"][0][indMax]) + abs(self.levels_n["right"][0][indMax])
             y, z = self.pointXShape(indMax, maxCur, wbf, self.xshapePoints)
             si = self.getCenterline_sn()[indMax]
-            z = z + si*self.getPipeSlope()
+            z = z + si * self.getPipeSlope()
             y, z = self.addBankPoints(y, z, indMax)
-            plt.plot(y, z, 'k-', marker='o', label='Max Curvature:\nx = '+str(indMax))
+            plt.plot(y, z, 'k-', marker='o', label=f'Max Curvature: x={indMax}')
             plt.xlabel('Y (related to center of channel)')
             plt.ylabel('Z')
             plt.legend()
 
+            # Subplot #2: Min Curvature
             plt.subplot(211)
             indMin = np.argmin(abs_cur_v)
-            minCur = cur_v[indMin]
             wbf = abs(self.levels_n["left"][0][indMin]) + abs(self.levels_n["right"][0][indMin])
-            y, z = self.pointXShape(indMin, maxCur, wbf, self.xshapePoints)
+            y, z = self.pointXShape(indMin, minCur, wbf, self.xshapePoints)
             si = self.getCenterline_sn()[indMin]
-            z = z + si*self.getPipeSlope()
+            z = z + si * self.getPipeSlope()
             y, z = self.addBankPoints(y, z, indMin)
-
-            y = y*self.dx
-            z = z*self.dx
-
-            plt.plot(y, z, 'k-', marker='o', label='Min Curvature:\nx = '+str(indMin))
+            y = y * self.dx
+            z = z * self.dx
+            plt.plot(y, z, 'k-', marker='o', label=f'Min Curvature: x={indMin}')
             plt.ylabel('Z')
             plt.legend()
             return fig
@@ -374,6 +508,459 @@ class Channel(Pipe):
         self.xshape_y = np.array(out_y)
         self.xshape_z = np.array(out_z)
         self.z_center = np.array(center_z)
+    
+    def setXShapeCF(self, CF_a,CF_b,CF_c):
+        """
+        The custom CF shape: z = (a * |x - b|)^c.
+        """
+
+        self.CF_a = float(CF_a)
+        self.CF_b = float(CF_b)
+        self.CF_c = float(CF_c)
+
+        out_x, out_y, out_z = [], [], []
+        center_z = []
+
+        y_center = self.getCenterline_y()
+        s_center = self.getCenterline_sn()
+        pipe_slope = self.getPipeSlope()
+
+
+        xshape_lines = [[] for _ in range(self.xshapePoints)]
+
+        for ind in range(len(y_center) - 1):
+            # channel "width" (left+right)
+            wbf = abs(self.levels_n['left'][0][ind]) + abs(self.levels_n['right'][0][ind])
+            centerOffset = (self.levels_n['left'][0][ind] + self.levels_n['right'][0][ind]) / 2
+
+            x1, y1 = self.x_v[ind],     y_center[ind]
+            x2, y2 = self.x_v[ind + 1], y_center[ind + 1]
+
+            s = s_center[ind]
+
+            #local y and z
+            y_temp, z = self.cfXShape(wbf, n=self.xshapePoints, CF_a=CF_a, CF_b=CF_b,CF_c=CF_c )
+
+            # shift the channel so that the center is at 'centerOffset'
+            y_temp = y_temp + centerOffset
+
+            # local coordinates to global XY
+            real_x, real_y = functions.sn_to_xy(x1, y1, x2, y2, y_temp)
+
+
+            # same pattern as setXShape
+            for i in range(len(xshape_lines)):
+                xshape_lines[i].append((real_x[i], real_y[i], z[i]))
+
+            # centerline z
+            center_z.append(self.calCenter_z(real_x, real_y, z, x1, y1))
+
+        # add the last point’s center_z
+        center_z.append(center_z[-1])
+
+        # combine with bank & inner-pipe points
+        x_min = floor(min(self.innerPipePoints.keys()))
+        x_max = ceil(max(self.innerPipePoints.keys())) + 1
+        markPoints = [[] for _ in range(ceil(x_max) - min(floor(x_min), 0))]
+
+        # left bank
+        for i in range(len(self.levels_x['left'][0])):
+            xx = self.levels_x['left'][0][i]
+            yy = self.levels_y['left'][0][i]
+            zz = self.levels_z['left'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        # right bank
+        for i in range(len(self.levels_x['right'][0])):
+            xx = self.levels_x['right'][0][i]
+            yy = self.levels_y['right'][0][i]
+            zz = self.levels_z['right'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        # cross-section lines
+        for line in xshape_lines:
+            line = functions.deleteCycles(line)
+            for (xx, yy, zz) in line:
+                markPoints[xx].append((yy, zz))
+
+        # interpolate z for the "innerPipePoints"
+        for xx in self.innerPipePoints.keys():
+            innerPoint_y = self.innerPipePoints[xx]
+            xshape_yz = markPoints[xx]
+            if len(xshape_yz) == 0:
+                continue
+            xshape_yz.sort()
+            xshape_y = [yy for (yy, zz) in xshape_yz]
+            xshape_z = [zz for (yy, zz) in xshape_yz]
+            for yval in innerPoint_y:
+                ind1, ind2 = functions.indexBound(yval, xshape_y)
+                if ind1 == ind2:
+                    zz = xshape_z[ind1]
+                else:
+                    z1, z2 = xshape_z[ind1], xshape_z[ind2]
+                    y1, y2 = xshape_y[ind1], xshape_y[ind2]
+                    alpha = (yval - y1) / (y2 - y1)
+                    zz = z1 * (1 - alpha) + z2 * alpha
+
+                out_x.append(xx)
+                out_y.append(yval)
+                out_z.append(zz)
+
+        self.xshape_x = np.array(out_x)
+        self.xshape_y = np.array(out_y)
+        self.xshape_z = np.array(out_z)
+        self.z_center = np.array(center_z)
+        self.cross_section_type = 'CF'
+
+    def setXShapePY(self):
+        """
+        """
+
+        out_x, out_y, out_z = [], [], []
+        xshape_lines = [[] for _ in range(self.xshapePoints)]
+        center_z = []
+
+        y_center = self.getCenterline_y()
+        s_center = self.getCenterline_sn()
+        pipe_slope = self.getPipeSlope()
+
+        # Looping over each station
+        for ind in range(len(y_center)-1):
+            wbf = abs(self.levels_n['left'][0][ind]) + abs(self.levels_n['right'][0][ind])
+            centerOffset = (self.levels_n['left'][0][ind] + self.levels_n['right'][0][ind]) / 2
+
+            x1, y1 = self.x_v[ind],     y_center[ind]
+            x2, y2 = self.x_v[ind+1],   y_center[ind+1]
+
+            s = s_center[ind]
+
+            # 1) local cross-section for this station
+            y_temp, z_temp = self.pyXShape(wbf)
+
+            y_temp = y_temp + centerOffset
+
+            # 2) convert local y_temp => global coordinates
+            real_x, real_y = functions.sn_to_xy(x1, y1, x2, y2, y_temp)
+
+            for i in range(len(xshape_lines)):
+                xshape_lines[i].append((real_x[i], real_y[i], z_temp[i]))
+
+            # centerline z
+            center_z.append(self.calCenter_z(real_x, real_y, z_temp, x1, y1))
+
+        # add last station center
+        center_z.append(center_z[-1])
+
+        # Merge cross-section lines with left/right bank points
+        x_min = floor(min(self.innerPipePoints.keys()))
+        x_max = ceil(max(self.innerPipePoints.keys())) + 1
+        markPoints = [[] for _ in range(ceil(x_max) - min(floor(x_min), 0))]
+
+        # banks left + right
+        for i in range(len(self.levels_x['left'][0])):
+            xx = self.levels_x['left'][0][i]
+            yy = self.levels_y['left'][0][i]
+            zz = self.levels_z['left'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        for i in range(len(self.levels_x['right'][0])):
+            xx = self.levels_x['right'][0][i]
+            yy = self.levels_y['right'][0][i]
+            zz = self.levels_z['right'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        # cross-section lines
+        for line in xshape_lines:
+            line = functions.deleteCycles(line)
+            for (xx, yy, zz) in line:
+                markPoints[xx].append((yy, zz))
+
+        # fill in "innerPipePoints"
+        for xx in self.innerPipePoints.keys():
+            innerPoint_y = self.innerPipePoints[xx]
+            xshape_yz = markPoints[xx]
+            if len(xshape_yz) == 0:
+                continue
+
+            xshape_yz.sort()  # sorting by Y
+            xshape_y = [pair[0] for pair in xshape_yz]
+            xshape_z = [pair[1] for pair in xshape_yz]
+
+            for yval in innerPoint_y:
+                ind1, ind2 = functions.indexBound(yval, xshape_y)
+                if ind1 == ind2:
+                    zz = xshape_z[ind1]
+                else:
+                    z1, z2 = xshape_z[ind1], xshape_z[ind2]
+                    yy1, yy2 = xshape_y[ind1], xshape_y[ind2]
+                    alpha = (yval - yy1) / (yy2 - yy1)
+                    zz = z1*(1 - alpha) + z2*alpha
+
+                out_x.append(xx)
+                out_y.append(yval)
+                out_z.append(zz)
+
+        self.xshape_x = np.array(out_x)
+        self.xshape_y = np.array(out_y)
+        self.xshape_z = np.array(out_z)
+        self.z_center = np.array(center_z)
+        self.cross_section_type = 'PY'
+
+    def setXShapeAF(self, d1, d2, ang1, ang2):
+        """   
+        The left bank of each local cross‐section is forced to start at the bank top,
+        defined as thalweg + d1. The profile runs piecewise:
+        -> Left slope: from (leftBank, top) dropping linearly to thalweg.
+        -> Right slope: from (rightBank, top) dropping linearly to thalweg + d2.
+        -> Middle: a straight-line connection between the two slopes.
+        """
+        out_x, out_y, out_z = [], [], []
+        center_z = []
+        y_center = self.getCenterline_y()
+        s_center = self.getCenterline_sn()
+        
+        # store the supplied AF parameters for later reference.
+        self.af_d1 = float(d1)
+        self.af_d2 = float(d2)
+        self.af_ang1 = float(ang1)
+        self.af_ang2 = float(ang2)
+        
+        xshape_lines = [[] for _ in range(self.xshapePoints)]
+        
+        for ind in range(len(y_center) - 1):
+            # bankfull width
+            wbf = abs(self.levels_n['left'][0][ind]) + abs(self.levels_n['right'][0][ind])
+            # lateral offset (if left and right inner bank offsets differ)
+            centerOffset = (self.levels_n['left'][0][ind] + self.levels_n['right'][0][ind]) / 2.0
+            
+            x1, y1 = self.x_v[ind], y_center[ind]
+            x2, y2 = self.x_v[ind + 1], y_center[ind + 1]
+            
+            # local AF profile
+            y_temp, z_temp = self.afXShape(wbf, n=self.xshapePoints, d1=d1, d2=d2, ang1=ang1, ang2=ang2)
+            
+            # leftmost and rightmost points to equal the bank top
+            bank_top = self.getThalweg()[ind] + float(d1)
+            z_temp[0] = bank_top
+            z_temp[-1] = bank_top
+            
+            y_temp += centerOffset
+            
+            # local (sn) to global (x,y)
+            real_x, real_y = functions.sn_to_xy(x1, y1, x2, y2, y_temp)
+            if len(real_x) == 0:
+                real_x = [x1] * self.xshapePoints
+                real_y = [y1] * self.xshapePoints
+            
+            for i in range(min(len(real_x), self.xshapePoints)):
+                xshape_lines[i].append((real_x[i], real_y[i], z_temp[i]))
+            
+            center_z.append(self.calCenter_z(real_x, real_y, z_temp, x1, y1))
+        
+        center_z.append(center_z[-1])
+        
+        for spoke in xshape_lines:
+            for (xx, yy, zz) in spoke:
+                out_x.append(xx)
+                out_y.append(yy)
+                out_z.append(zz)
+        
+        self.xshape_x = np.array(out_x)
+        self.xshape_y = np.array(out_y)
+        self.xshape_z = np.array(out_z)
+        self.z_center = np.array(center_z)
+        self.cross_section_type = 'AF'
+
+
+    def setXShapeDT(self):
+        """
+        The DT cross-section is defined using a parabolic U-shape with an added
+        Gaussian dip at the center:
+            z = A*(1 - x^2) - D * exp(- (x^2)/(2*sigma^2))
+        """
+        out_x, out_y, out_z = [], [], []
+        center_z = []
+
+        y_center = self.getCenterline_y()
+        s_center = self.getCenterline_sn()
+        pipe_slope = self.getPipeSlope()
+
+        xshape_lines = [[] for _ in range(self.xshapePoints)]
+
+        for ind in range(len(y_center) - 1):
+            # Compute channel width at this station.
+            wbf = abs(self.levels_n['left'][0][ind]) + abs(self.levels_n['right'][0][ind])
+            centerOffset = (self.levels_n['left'][0][ind] + self.levels_n['right'][0][ind]) / 2
+
+            x1, y1 = self.x_v[ind], y_center[ind]
+            x2, y2 = self.x_v[ind+1], y_center[ind+1]
+
+            s = s_center[ind]
+
+            # 1) Get local DT cross-section shape.
+            y_temp, z_temp = self.dtXShape(wbf)
+            
+            # Shift cross-section horizontally by centerOffset.
+            y_temp = y_temp + centerOffset
+
+            # 2) Convert local y_temp to global (x, y) coordinates.
+            real_x, real_y = functions.sn_to_xy(x1, y1, x2, y2, y_temp)
+
+            # 3) Append the points into cross-section line storage.
+            for i in range(len(xshape_lines)):
+                xshape_lines[i].append((real_x[i], real_y[i], z_temp[i]))
+
+            # 4) Compute and store the centerline z for this station.
+            center_z.append(self.calCenter_z(real_x, real_y, z_temp, x1, y1))
+
+        center_z.append(center_z[-1])
+
+        # Merge with bank points.
+        x_min = floor(min(self.innerPipePoints.keys()))
+        x_max = ceil(max(self.innerPipePoints.keys())) + 1
+        markPoints = [[] for _ in range(ceil(x_max) - min(floor(x_min), 0))]
+
+        # Left bank
+        for i in range(len(self.levels_x['left'][0])):
+            xx = self.levels_x['left'][0][i]
+            yy = self.levels_y['left'][0][i]
+            zz = self.levels_z['left'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        # Right bank
+        for i in range(len(self.levels_x['right'][0])):
+            xx = self.levels_x['right'][0][i]
+            yy = self.levels_y['right'][0][i]
+            zz = self.levels_z['right'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        # Add cross-section line points
+        for line in xshape_lines:
+            line = functions.deleteCycles(line)
+            for (xx, yy, zz) in line:
+                markPoints[xx].append((yy, zz))
+
+        # Interpolate z for innerPipePoints.
+        for xx in self.innerPipePoints.keys():
+            innerPoint_y = self.innerPipePoints[xx]
+            xshape_yz = markPoints[xx]
+            if len(xshape_yz) == 0:
+                continue
+            xshape_yz.sort()  # sort by Y
+            xshape_y = [yy for (yy, zz) in xshape_yz]
+            xshape_z = [zz for (yy, zz) in xshape_yz]
+            for yval in innerPoint_y:
+                ind1, ind2 = functions.indexBound(yval, xshape_y)
+                if ind1 == ind2:
+                    zz = xshape_z[ind1]
+                else:
+                    z1, z2 = xshape_z[ind1], xshape_z[ind2]
+                    y1, y2 = xshape_y[ind1], xshape_y[ind2]
+                    alpha = (yval - y1) / (y2 - y1)
+                    zz = z1 * (1 - alpha) + z2 * alpha
+                out_x.append(xx)
+                out_y.append(yval)
+                out_z.append(zz)
+
+        self.xshape_x = np.array(out_x)
+        self.xshape_y = np.array(out_y)
+        self.xshape_z = np.array(out_z)
+        self.z_center = np.array(center_z)
+        self.crossSectionType = 'DT'
+
+    def setXShapeTU(self):
+        """
+        Build the geometry for a 'TU' (Triple U) cross–section..
+
+        """
+        out_x, out_y, out_z = [], [], []
+        center_z = []
+
+        y_center = self.getCenterline_y()
+        s_center = self.getCenterline_sn()
+        pipe_slope = self.getPipeSlope()
+
+        xshape_lines = [[] for _ in range(self.xshapePoints)]
+
+        for ind in range(len(y_center) - 1):
+            # Compute channel width at this station.
+            wbf = abs(self.levels_n['left'][0][ind]) + abs(self.levels_n['right'][0][ind])
+            centerOffset = (self.levels_n['left'][0][ind] + self.levels_n['right'][0][ind]) / 2
+
+            x1, y1 = self.x_v[ind], y_center[ind]
+            x2, y2 = self.x_v[ind+1], y_center[ind+1]
+
+            s = s_center[ind]
+
+            # Generate the TU shape
+            y_temp, z_temp = self.tuXShape(wbf)
+
+            # Shift the local y-coordinates by the center offset.
+            y_temp = y_temp + centerOffset
+
+            # Convert local (y_temp, z_temp) to global (x, y) coordinates.
+            real_x, real_y = functions.sn_to_xy(x1, y1, x2, y2, y_temp)
+
+            for i in range(len(xshape_lines)):
+                xshape_lines[i].append((real_x[i], real_y[i], z_temp[i]))
+
+            # Compute centerline z for this station.
+            center_z.append(self.calCenter_z(real_x, real_y, z_temp, x1, y1))
+
+        center_z.append(center_z[-1])
+
+        # Merge cross-section lines with bank and inner-pipe points.
+        x_min = floor(min(self.innerPipePoints.keys()))
+        x_max = ceil(max(self.innerPipePoints.keys())) + 1
+        markPoints = [[] for _ in range(ceil(x_max) - min(floor(x_min), 0))]
+
+        # Left bank points.
+        for i in range(len(self.levels_x['left'][0])):
+            xx = self.levels_x['left'][0][i]
+            yy = self.levels_y['left'][0][i]
+            zz = self.levels_z['left'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        # Right bank points.
+        for i in range(len(self.levels_x['right'][0])):
+            xx = self.levels_x['right'][0][i]
+            yy = self.levels_y['right'][0][i]
+            zz = self.levels_z['right'][0][i]
+            markPoints[int(xx)].append((yy, zz))
+
+        # Add cross-section line points.
+        for line in xshape_lines:
+            line = functions.deleteCycles(line)
+            for (xx, yy, zz) in line:
+                markPoints[xx].append((yy, zz))
+
+        # Interpolate z for innerPipePoints.
+        for xx in self.innerPipePoints.keys():
+            innerPoint_y = self.innerPipePoints[xx]
+            xshape_yz = markPoints[xx]
+            if len(xshape_yz) == 0:
+                continue
+            xshape_yz.sort()  # sort by y
+            xshape_y = [yy for (yy, zz) in xshape_yz]
+            xshape_z = [zz for (yy, zz) in xshape_yz]
+            for yval in innerPoint_y:
+                ind1, ind2 = functions.indexBound(yval, xshape_y)
+                if ind1 == ind2:
+                    zz = xshape_z[ind1]
+                else:
+                    z1, z2 = xshape_z[ind1], xshape_z[ind2]
+                    y1, y2 = xshape_y[ind1], xshape_y[ind2]
+                    alpha = (yval - y1) / (y2 - y1)
+                    zz = z1*(1 - alpha) + z2*alpha
+                out_x.append(xx)
+                out_y.append(yval)
+                out_z.append(zz)
+
+        self.xshape_x = np.array(out_x)
+        self.xshape_y = np.array(out_y)
+        self.xshape_z = np.array(out_z)
+        self.z_center = np.array(center_z)
+        self.cross_section_type = 'TU'
 
 
     def addBoulders(self, num, size_mean, size_std, height):
@@ -567,6 +1154,8 @@ class Channel(Pipe):
 
 ##############################################################
 
+# Helper functios
+
     def helpAppend(self, li, dic):
         for array in dic["left"]:
             li += array.tolist()
@@ -655,6 +1244,219 @@ class Channel(Pipe):
 
         n_z = self.thalweg[ind] + hbf - n_z
         return n_y, np.array(n_z)
+
+    def cfXShape(self, wbf, n=21, hbf=None, thalweg=None, CF_a=None, CF_b=None, CF_c=None):
+        """
+        The profile is designed so that:
+        -> at the center (y=0): elevation = thalweg (lowest point)
+        -> at the banks (y = ±wbf/2): elevation = thalweg + hbf (bank level)
+        
+        The equation used is:
+            profile = (a * |x_norm - b|)^c,
+        
+        where x_norm  (normalised - 0 at center, 1 at bank).
+        raw profile is then normalized to [0,1] and mapped to elevations.
+        """
+
+        # If hbf or thalweg are not provided, compute them at the mid-station.
+        if hbf is None or thalweg is None:
+            midInd = len(self.x_v) // 2
+            xVal = np.round(self.x_v[midInd])
+            lbx = self.levels_x['left'][0]
+            lb = self.levels_z['left'][0]
+            rbx = self.levels_x['right'][0]
+            rb = self.levels_z['right'][0]
+            lb_ind = np.where(lbx == xVal)[0]
+            if len(lb_ind) == 0:
+                bankH = rb[np.where(rbx == xVal)[0][0]]
+            else:
+                bankH = lb[lb_ind[0]]
+            hbf = bankH - self.thalweg[midInd]
+            thalweg = self.thalweg[midInd]
+
+        y_temp = np.linspace(-wbf/2, wbf/2, self.xshapePoints)
+        
+        x_norm = np.abs(y_temp) / (wbf/2.0)
+        
+        # parameters for the profile equation.
+        # a = 1.0   # scaling factor (adjust to change amplitude)
+        # b = 0   # shift: if b=0.5, deepest is near the center; if b differs, it shifts the curve.
+        # c = 0.25   # exponent: controls curvature (convex/concave)
+
+        # Use user-provided values (or defaults)
+        CF_a = float(CF_a) if CF_a is not None else 1
+        CF_b = float(CF_b) if CF_b is not None else 0
+        CF_c = float(CF_c) if CF_c is not None else 0.25
+
+        # Compute raw profile using the equation: (a * |x_norm - b|)^c
+        profile_raw = (CF_a * np.abs(x_norm - CF_b))**CF_c
+
+        # Normalize the raw profile so that it spans from 0 to 1.
+        # Note: Depending on a, b, c, the raw profile's min and max can be adjusted.
+        p_min = np.min(profile_raw)
+        p_max = np.max(profile_raw)
+        normalized_profile = (profile_raw - p_min) / (p_max - p_min)
+
+        z_temp = thalweg + hbf * normalized_profile
+        print(f"Calling cfx with {CF_a} {CF_b} {CF_c}")
+        return y_temp, z_temp
+
+    def pyXShape(self, wbf, hbf=None, thalweg=None, A=10.0, B=3.0, freq=2):
+        """
+        'wavy U–shape' cross–section based on:
+            z = A*(1 - x^2) + B*sin(2*pi*freq*x),
+        where, x -> [-1, 1]
+        y is mapped to [-wbf/2, wbf/2]. 
+        """
+        # If hbf or thalweg are not provided, compute them at the mid–station:
+        if hbf is None or thalweg is None:
+            midInd = len(self.x_v) // 2
+            xVal = np.round(self.x_v[midInd])
+            lbx = self.levels_x['left'][0]
+            lb = self.levels_z['left'][0]
+            rbx = self.levels_x['right'][0]
+            rb = self.levels_z['right'][0]
+            lb_ind = np.where(lbx == xVal)[0]
+            if len(lb_ind) == 0:
+                bankH = rb[np.where(rbx == xVal)[0][0]]
+            else:
+                bankH = lb[lb_ind[0]]
+            hbf = bankH - self.thalweg[midInd]
+            thalweg = self.thalweg[midInd]
+        
+        n = self.xshapePoints
+
+        x_vals = np.linspace(-1, 1, n)
+        y_vals = x_vals * (wbf / 2.0)
+
+        z_raw = A * (1 - x_vals**2) + B * np.sin(2 * np.pi * freq * x_vals)
+
+        z_min = np.min(z_raw)
+        z_max = np.max(z_raw)
+    
+        z_vals = thalweg + hbf * (1 - (z_raw - z_min) / (z_max - z_min))
+    
+        return y_vals, z_vals
+
+    def afXShape(self, wbf, n=21, hbf=None, thalweg=None, d1=None, d2=None, ang1=None, ang2=None):
+        midInd = len(self.x_v) // 2
+        if thalweg is None:
+            thalweg = self.getThalweg()[midInd]
+
+        # user‐provided or defaults
+        d1 = float(d1) if d1 is not None else 5
+        d2 = float(d2) if d2 is not None else 5
+        ang1 = math.radians(float(ang1)) if ang1 is not None else math.radians(55)
+        ang2 = math.radians(float(ang2)) if ang2 is not None else math.radians(55)
+
+        # horizontal runs for each bank
+        w1 = d1 / math.tan(ang1) if math.tan(ang1) != 0 else 0
+        w2 = d2 / math.tan(ang2) if math.tan(ang2) != 0 else 0
+
+        # local x from -wbf/2 .. +wbf/2
+        leftBank, rightBank = -wbf/2.0, wbf/2.0
+        leftEnd  = leftBank + w1
+        rightStart = rightBank - w2
+
+        # crest elevation
+        top = thalweg + d1
+
+        x_vals = np.linspace(leftBank, rightBank, n)
+        z_vals = np.empty_like(x_vals)
+
+        for i, x in enumerate(x_vals):
+            if x <= leftEnd:
+                # left slope down to bed
+                t = (x - leftBank) / w1 if w1 else 0
+                z_vals[i] = top + t*(thalweg - top)
+            elif x >= rightStart:
+                # right slope down to bed
+                t = (rightBank - x) / w2 if w2 else 0
+                z_vals[i] = top + t*(thalweg - top)
+            else:
+                # flat bed
+                z_vals[i] = thalweg
+
+        # ensure the very edges hit the crest exactly
+        z_vals[0]  = top
+        z_vals[-1] = top
+
+        return x_vals, z_vals
+
+
+    def dtXShape(self, wbf, hbf=None, thalweg=None, A=10.0, D=8.0, sigma=0.3):
+        """   
+        The DT shape is defined by:
+            z = A*(1 - x^2) - D * exp(- (x^2)/(2*sigma^2)),
+        where, x -> [-1, 1]
+        y is mapped to [-wbf/2, wbf/2]. 
+        """
+        if hbf is None or thalweg is None:
+            midInd = len(self.x_v) // 2
+            xVal = np.round(self.x_v[midInd])
+            lbx = self.levels_x['left'][0]
+            lbz = self.levels_z['left'][0]
+            rbx = self.levels_x['right'][0]
+            rbz = self.levels_z['right'][0]
+            lb_ind = np.where(lbx == xVal)[0]
+            if len(lb_ind) == 0:
+                bankH = rbz[np.where(rbx == xVal)[0][0]]
+            else:
+                bankH = lbz[lb_ind[0]]
+            hbf = bankH - self.thalweg[midInd]
+            thalweg = self.thalweg[midInd]
+        
+        n = self.xshapePoints
+        x_vals = np.linspace(-1, 1, n)    # dimensionless coordinate in [-1, 1]
+        y_vals = x_vals * (wbf / 2.0)
+
+        #  A*(1 - x^2) creates a parabolic U-shape,
+        #  & subtracting D*exp(-x^2/(2*sigma^2)) produces a Gaussian dip near x=0.
+        z_raw = A * (1 - x_vals**2) - D * np.exp(- (x_vals**2) / (2 * sigma**2))
+        
+        z_min = np.min(z_raw)
+        z_max = np.max(z_raw)
+        z_vals = thalweg + hbf * (1 - (z_raw - z_min) / (z_max - z_min))
+        
+        return y_vals, z_vals
+
+    def tuXShape(self, wbf, hbf=None, thalweg=None, A=10.0, B=2.0, C=4.0, sigma=0.2):
+        """
+        Returns (y, z) arrays for a 'TU' (Triple U) cross–section.
+        
+        The raw profile is defined by:
+            z_raw(x) = A*(1 - x^2) + B*sin(3*pi*x) - C*exp(-((x - 0.5)**2)/(2*sigma**2))
+        where, x -> [-1, 1]
+        y is mapped to [-wbf/2, wbf/2]. 
+        """
+        if hbf is None or thalweg is None:
+            midInd = len(self.x_v) // 2
+            xVal = np.round(self.x_v[midInd])
+            lbx = self.levels_x['left'][0]
+            lbz = self.levels_z['left'][0]
+            rbx = self.levels_x['right'][0]
+            rbz = self.levels_z['right'][0]
+            lb_ind = np.where(lbx == xVal)[0]
+            if len(lb_ind) == 0:
+                bankH = rbz[np.where(rbx == xVal)[0][0]]
+            else:
+                bankH = lbz[lb_ind[0]]
+            hbf = bankH - self.thalweg[midInd]
+            thalweg = self.thalweg[midInd]
+
+        n = self.xshapePoints  # number of sample points across the channel
+        x_vals = np.linspace(-1, 1, n)        #  [-1, 1]
+        y_vals = x_vals * (wbf / 2.0)           #  y from -wbf/2 to +wbf/2
+
+        # profile: three U's with extra deep third one.
+        z_raw = A * (1 - x_vals**2) + B * np.sin(3 * np.pi * x_vals) - C * np.exp(-((x_vals - 0.5)**2) / (2 * sigma**2))
+
+        z_min = np.min(z_raw)
+        z_max = np.max(z_raw)
+        z_vals = thalweg + hbf * (1 - (z_raw - z_min) / (z_max - z_min))
+
+        return y_vals, z_vals
+
 
 
     def addBankPoints(self, y, z, ind):

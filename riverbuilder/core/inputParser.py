@@ -21,7 +21,7 @@ from datetime import datetime
 ALLOWFUN = set(["MASK", "SIN", "COS", "LINE", "PERLIN", "SINSQ", "COSSQ", "CNOIDAL", "STEP", "HIGHCURV"])
 FUNPARANUM = {"SIN":4, "COS":4, 'SINSQ':4, 'COSSQ':4, "LINE":3, "PERLIN":4, "CNOIDAL":5, "STEP":5,
         "HIGHCURV": 5}
-XSHAPES = set(['AU', 'SU', 'EN'])
+XSHAPES = set(['AU', 'SU', 'EN', 'CF', 'PY', 'AF'])
 ADDON = {'BEG':[], 'CD':[]}
 
 
@@ -335,6 +335,9 @@ def inputCheck(fdict):
     fdict, info = paraCheck(fdict, "Median Sediment Size (D50)", 0.01, "float", 1)
     log += info
     log += printPara("Median Sediment Size (D50)", fdict)
+    fdict, info= paraCheck(fdict, "Cross-Sectional Shape", "SU", "str") #these code chunk dont affect I don't understand why -- same code is river.py that affects
+    log+= info 
+    log+=printPara("Cross-Sectional Shape", fdict)
     fdict, info = paraCheck(fdict, "Left Valley Boundary Lateral Offset Minimum", 10, "float", 1)
     log += info
     log += printPara("Left Valley Boundary Lateral Offset Minimum", fdict)
@@ -360,6 +363,7 @@ def inputCheck(fdict):
     log += info
     log += printPara("River Slope", fdict)
     log += ''
+
 
     funDict, info = buildFunDict(fdict)
     log += info
@@ -710,6 +714,12 @@ def buildChannel(fdict, funDict):
 
     if fdict[ckey] == 'AU':
         c.setXShape()
+    elif fdict[ckey] =='CF':
+        c.setXShapeCF()
+    elif fdict[ckey] =='PY':
+        c.setXShapePY()
+    elif fdict[ckey] =='AF':
+        c.setXShapeAF()
     elif fdict[ckey] == 'SU':
         copyCurvature = copy.copy(c.getDynamicCurv())
         c.dynamicCurv = c.dynamicCurv*0
